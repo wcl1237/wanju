@@ -18,11 +18,14 @@ export class BlueprintService {
 
   /** 确保默认蓝图存在 */
   async ensureDefaultExists(): Promise<void> {
-    const existing = await this.repo.findById(DEFAULT_BLUEPRINT_ID);
-    if (existing) return;
+    // 检查是否已有默认蓝图（按 isDefault 查找，而非固定 ID）
+    const existing = await this.repo.findDefault();
+    if (existing) {
+      console.log(`[Blueprint] 默认智能体「${existing.name}」已存在 (id=${existing.id})`);
+      return;
+    }
 
     // 创建默认的「智能对话」蓝图
-    const now = new Date().toISOString();
     await this.repo.create({
       name: '智能对话',
       description: '全渠道智能客服系统，支持 RAG 知识库检索、工单创建、多轮对话、三层记忆',
