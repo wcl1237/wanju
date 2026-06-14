@@ -21,17 +21,31 @@ export class TypeOrmChatRepository implements IChatRepository {
   @InjectEntityModel(MessageEntity)
   messageRepo: Repository<MessageEntity>;
 
-  async createConversation(title = '新对话'): Promise<Conversation> {
+  async createConversation(title = '新对话', blueprintId = ''): Promise<Conversation> {
     const id = uuidv4();
     const now = new Date().toISOString();
-    const entity = this.conversationRepo.create({ id, title, createdAt: now, updatedAt: now });
+    const entity = this.conversationRepo.create({ id, title, blueprintId, createdAt: now, updatedAt: now });
     await this.conversationRepo.save(entity);
-    return { id, title, createdAt: now, updatedAt: now };
+    return { id, title, blueprintId, createdAt: now, updatedAt: now };
   }
 
   async getConversations(): Promise<Conversation[]> {
     const rows = await this.conversationRepo.find({ order: { updatedAt: 'DESC' } });
-    return rows.map(r => ({ id: r.id, title: r.title, createdAt: r.createdAt, updatedAt: r.updatedAt }));
+    return rows.map(r => ({ id: r.id, title: r.title, blueprintId: r.blueprintId || '', createdAt: r.createdAt, updatedAt: r.updatedAt }));
+  }
+
+  async getConversationsByBlueprint(blueprintId: string): Promise<Conversation[]> {
+    const rows = await this.conversationRepo.find({
+      where: { blueprintId },
+      order: { updatedAt: 'DESC' },
+    });
+    return rows.map(r => ({ id: r.id, title: r.title, blueprintId: r.blueprintId || '', createdAt: r.createdAt, updatedAt: r.updatedAt }));
+  }
+
+  async getConversationById(id: string): Promise<Conversation | undefined> {
+    const row = await this.conversationRepo.findOneBy({ id });
+    if (!row) return undefined;
+    return { id: row.id, title: row.title, blueprintId: row.blueprintId || '', createdAt: row.createdAt, updatedAt: row.updatedAt };
   }
 
   async getMessages(conversationId: string): Promise<Message[]> {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export type NavPage = 'chat' | 'knowledge' | 'tickets' | 'workflows' | 'skills' | 'agents';
+export type NavPage = 'chat' | 'knowledge' | 'tickets' | 'workflows' | 'skills' | 'agents' | 'blueprints';
 
 interface NavSidebarProps {
   activePage: NavPage;
@@ -10,6 +10,7 @@ interface NavSidebarProps {
 }
 
 const navItems: { id: NavPage; icon: string; label: string }[] = [
+  { id: 'blueprints', icon: '🏭', label: '智能体' },
   { id: 'chat', icon: '💬', label: '智能对话' },
   { id: 'knowledge', icon: '📚', label: '知识库' },
   { id: 'tickets', icon: '🎫', label: '工单管理' },

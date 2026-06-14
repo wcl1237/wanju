@@ -9,12 +9,20 @@ export class ChatService {
   @Inject('chatRepository')
   chatRepo: IChatRepository;
 
-  createConversation(title = '新对话'): Promise<Conversation> {
-    return this.chatRepo.createConversation(title);
+  createConversation(title = '新对话', blueprintId = ''): Promise<Conversation> {
+    return this.chatRepo.createConversation(title, blueprintId);
   }
 
   async getConversations(): Promise<Conversation[]> {
     return this.chatRepo.getConversations();
+  }
+
+  async getConversationsByBlueprint(blueprintId: string): Promise<Conversation[]> {
+    return this.chatRepo.getConversationsByBlueprint(blueprintId);
+  }
+
+  async getConversationById(id: string): Promise<Conversation | undefined> {
+    return this.chatRepo.getConversationById(id);
   }
 
   async getMessages(conversationId: string): Promise<Message[]> {

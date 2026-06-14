@@ -6,8 +6,10 @@ import { Conversation } from '../model/conversation.model';
 import { Message } from '../model/message.model';
 
 export interface IChatRepository {
-  createConversation(title?: string): Promise<Conversation>;
+  createConversation(title?: string, blueprintId?: string): Promise<Conversation>;
   getConversations(): Promise<Conversation[]>;
+  getConversationsByBlueprint(blueprintId: string): Promise<Conversation[]>;
+  getConversationById(id: string): Promise<Conversation | undefined>;
   getMessages(conversationId: string): Promise<Message[]>;
   addMessage(
     conversationId: string,

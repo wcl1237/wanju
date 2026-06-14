@@ -16,19 +16,23 @@ import SkillHub from './features/skill/components/SkillHub';
 import WorkflowPage from './features/workflow/components/WorkflowPage';
 import WorkflowEditor from './features/workflow/components/WorkflowEditor';
 import AgentPool from './features/agent/components/AgentPool';
+import BlueprintPage from './features/blueprint/components/BlueprintPage';
+import BlueprintEditor from './features/blueprint/components/BlueprintEditor';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
+  if (pathname.startsWith('/blueprints')) return 'blueprints';
   if (pathname.startsWith('/chat')) return 'chat';
   if (pathname.startsWith('/knowledge')) return 'knowledge';
   if (pathname.startsWith('/tickets')) return 'tickets';
   if (pathname.startsWith('/workflows')) return 'workflows';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/skills')) return 'skills';
-  return 'chat';
+  return 'blueprints';
 }
 
 const pageToRoute: Record<NavPage, string> = {
+  blueprints: '/blueprints',
   chat: '/chat',
   knowledge: '/knowledge',
   tickets: '/tickets',
@@ -39,18 +43,24 @@ const pageToRoute: Record<NavPage, string> = {
 
 /**
  * 对话页面（带路由参数）
+ * 支持两种路由：
+ *   /chat/:conversationId — 全局对话（向后兼容）
+ *   /blueprints/:id/chat/:conversationId — 按智能体隔离的对话
  */
 function ChatPage() {
-  const { conversationId } = useParams<{ conversationId: string }>();
+  const { conversationId, id: blueprintId } = useParams<{ conversationId: string; id: string }>();
   const navigate = useNavigate();
 
-  const onNavigate = useCallback((id: string | null) => {
-    if (id) {
-      navigate(`/chat/${id}`, { replace: true });
+  // 根据是否有 blueprintId 生成导航路径
+  const basePath = blueprintId ? `/blueprints/${blueprintId}/chat` : '/chat';
+
+  const onNavigate = useCallback((navId: string | null) => {
+    if (navId) {
+      navigate(`${basePath}/${navId}`, { replace: true });
     } else {
-      navigate('/chat', { replace: true });
+      navigate(basePath, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, basePath]);
 
   const {
     conversations,
@@ -63,17 +73,17 @@ function ChatPage() {
     deleteConversation,
     send,
     loadMore,
-  } = useChat(conversationId, onNavigate);
+  } = useChat(conversationId, onNavigate, blueprintId);
 
   return (
     <div style={styles.chatLayout}>
       <Sidebar
         conversations={conversations}
         activeId={activeConversationId}
-        onSelect={(id) => navigate(`/chat/${id}`)}
+        onSelect={(selectId) => navigate(`${basePath}/${selectId}`)}
         onDelete={deleteConversation}
         onNew={newConversation}
-        onShowTrace={(id) => navigate(`/chat/${id}/trajectory`)}
+        onShowTrace={(traceId) => navigate(`/chat/${traceId}/trajectory`)}
       />
       <ChatPanel
         messages={messages}
@@ -214,12 +224,16 @@ function MainLayout({ user, onLogout }: { user: { id: string; username: string }
           <Route path="/chat/:conversationId/trajectory" element={<TrajectoryRoute />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/tickets" element={<TicketsPage />} />
+          <Route path="/blueprints" element={<BlueprintPage />} />
+          <Route path="/blueprints/:id/edit" element={<BlueprintEditor />} />
+          <Route path="/blueprints/:id/chat" element={<ChatPage />} />
+          <Route path="/blueprints/:id/chat/:conversationId" element={<ChatPage />} />
           <Route path="/workflows" element={<WorkflowPage />} />
           <Route path="/workflows/new" element={<WorkflowEditorRoute />} />
           <Route path="/workflows/:id/edit" element={<WorkflowEditorRoute />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/agents" element={<AgentsPage />} />
-          <Route path="*" element={<Navigate to="/chat" replace />} />
+          <Route path="*" element={<Navigate to="/blueprints" replace />} />
         </Routes>
       </div>
     </div>

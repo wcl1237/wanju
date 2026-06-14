@@ -5,6 +5,7 @@
 export interface Conversation {
   id: string;
   title: string;
+  blueprintId: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -15,6 +15,7 @@ import {
 export function useChat(
   conversationId: string | undefined,
   onNavigate: (id: string | null) => void,
+  blueprintId?: string,
 ) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -27,14 +28,14 @@ export function useChat(
   // 加载对话列表
   const loadConversations = useCallback(async () => {
     try {
-      const data = await getConversations();
+      const data = await getConversations(blueprintId);
       setConversations(data);
       return data;
     } catch (err) {
       console.error('加载对话列表失败:', err);
       return [];
     }
-  }, []);
+  }, [blueprintId]);
 
   // 当 URL 中的 conversationId 变化时，加载对应消息
   useEffect(() => {
@@ -61,7 +62,7 @@ export function useChat(
   // 新建对话
   const newConversation = useCallback(async () => {
     try {
-      const conv = await createConversation();
+      const conv = await createConversation(blueprintId);
       setConversations(prev => [conv, ...prev]);
       setMessages([]);
       onNavigate(conv.id);
@@ -70,7 +71,7 @@ export function useChat(
       console.error('创建对话失败:', err);
       return null;
     }
-  }, [onNavigate]);
+  }, [onNavigate, blueprintId]);
 
   // 删除对话
   const deleteConversation = useCallback(async (id: string) => {

@@ -12,14 +12,14 @@ export class ChatController {
   chatAppService: ChatAppService;
 
   @Post('/conversations')
-  async createConversation() {
-    const conversation = await this.chatAppService.createConversation();
+  async createConversation(@Body() body?: { blueprintId?: string }) {
+    const conversation = await this.chatAppService.createConversation(body?.blueprintId);
     return { success: true, data: conversation };
   }
 
   @Get('/conversations')
-  async getConversations() {
-    const conversations = await this.chatAppService.getConversations();
+  async getConversations(@Query('blueprintId') blueprintId?: string) {
+    const conversations = await this.chatAppService.getConversations(blueprintId);
     return { success: true, data: conversations };
   }
 

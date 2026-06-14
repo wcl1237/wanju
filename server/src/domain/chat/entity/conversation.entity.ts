@@ -9,6 +9,9 @@ export class ConversationEntity {
   @Column('text', { default: '新对话' })
   title: string;
 
+  @Column('text', { name: 'blueprint_id', default: '' })
+  blueprintId: string;
+
   @Column('text', { name: 'created_at' })
   createdAt: string;
 

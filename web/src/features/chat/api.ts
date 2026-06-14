@@ -1,14 +1,21 @@
 import { authFetch, apiUrl, removeUser } from '../../shared/http-client';
 import type { Conversation, Message, SSEEvent } from './types';
 
-export async function createConversation(): Promise<Conversation> {
-  const res = await authFetch(apiUrl('/chat/conversations'), { method: 'POST' });
+export async function createConversation(blueprintId?: string): Promise<Conversation> {
+  const res = await authFetch(apiUrl('/chat/conversations'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blueprintId }),
+  });
   const data = await res.json();
   return data.data;
 }
 
-export async function getConversations(): Promise<Conversation[]> {
-  const res = await authFetch(apiUrl('/chat/conversations'));
+export async function getConversations(blueprintId?: string): Promise<Conversation[]> {
+  const url = blueprintId
+    ? apiUrl(`/chat/conversations?blueprintId=${blueprintId}`)
+    : apiUrl('/chat/conversations');
+  const res = await authFetch(url);
   const data = await res.json();
   return data.data;
 }
