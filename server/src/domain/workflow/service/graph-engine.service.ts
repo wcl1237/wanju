@@ -60,11 +60,11 @@ export class GraphEngineService {
       stepCount: nodes.length,
     });
 
-    // 1. 找 trigger 节点
-    const triggerNode = nodes.find(n => n.type === 'trigger');
-    if (!triggerNode) {
-      console.error('[Workflow] 未找到 trigger 节点');
-      yield sseEvent({ type: 'content', content: '工作流配置错误：缺少触发器节点。' });
+    // 1. 找入口节点（优先 start，兼容 trigger）
+    const entryNode = nodes.find(n => n.type === 'start') || nodes.find(n => n.type === 'trigger');
+    if (!entryNode) {
+      console.error('[Workflow] 未找到入口节点（start 或 trigger）');
+      yield sseEvent({ type: 'content', content: '工作流配置错误：缺少开始节点。' });
       return;
     }
 
@@ -83,7 +83,7 @@ export class GraphEngineService {
     // 4. 递归遍历
     const visited = new Set<string>();
     yield* this.traverseNode(
-      triggerNode.id, adjacency, nodes, actions, context, execCtx, visited
+      entryNode.id, adjacency, nodes, actions, context, execCtx, visited
     );
 
     const totalMs = Date.now() - startTime;

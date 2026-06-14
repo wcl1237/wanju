@@ -38,6 +38,15 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
         </div>
       </div>
 
+      {/* 开始节点 */}
+      {node.type === 'start' && (
+        <div style={panelStyles.field}>
+          <label style={panelStyles.label}>欢迎语（可选）</label>
+          <textarea style={panelStyles.textarea} value={data.welcomeMessage || ''} onChange={e => update({ welcomeMessage: e.target.value })} placeholder="用户首次进入时的欢迎消息，留空则直接等待输入" rows={3} />
+          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>用户通过智能体入口进入时，自动发送此欢迎语</div>
+        </div>
+      )}
+
       {/* 触发器面板 */}
       {node.type === 'trigger' && <TriggerFields data={data} update={update} />}
 
@@ -126,7 +135,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
       {node.type === 'master_sub_agent' && <MasterSubFields data={data} update={update} agents={agents} />}
 
       {/* 最终回复开关 */}
-      {node.type !== 'trigger' && node.type !== 'end' && (
+      {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && (
         <FinalReplyToggle isFinal={!!data.isFinalReply} onToggle={() => update({ isFinalReply: !data.isFinalReply })} />
       )}
     </div>

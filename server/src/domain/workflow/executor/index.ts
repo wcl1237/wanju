@@ -4,6 +4,7 @@
 export { INodeExecutor, ExecutorDeps, NodeExecutionResult } from './node-executor.interface';
 export { NodeExecutorRegistry } from './node-executor.registry';
 export { TriggerExecutor } from './trigger.executor';
+export { StartExecutor } from './start.executor';
 export { EndExecutor } from './end.executor';
 export { ExtractExecutor } from './extract.executor';
 export { ConditionExecutor } from './condition.executor';
@@ -18,6 +19,7 @@ export { MasterSubAgentExecutor } from './master-sub-agent.executor';
 
 import { NodeExecutorRegistry } from './node-executor.registry';
 import { TriggerExecutor } from './trigger.executor';
+import { StartExecutor } from './start.executor';
 import { EndExecutor } from './end.executor';
 import { ExtractExecutor } from './extract.executor';
 import { ConditionExecutor } from './condition.executor';
@@ -37,6 +39,7 @@ export function createDefaultRegistry(): NodeExecutorRegistry {
   const registry = new NodeExecutorRegistry();
   registry.registerAll([
     new TriggerExecutor(),
+    new StartExecutor(),
     new EndExecutor(),
     new ExtractExecutor(),
     new ConditionExecutor(),

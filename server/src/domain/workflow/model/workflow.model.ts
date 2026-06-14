@@ -10,6 +10,8 @@ export interface FlowNodeData {
   triggerType?: 'keyword' | 'intent' | 'always' | 'regex'; // 触发类型
   keywords?: string[];
   regexPattern?: string; // 正则匹配表达式
+  // start
+  welcomeMessage?: string; // 开始节点的欢迎语
   // condition
   expression?: string;
   conditionField?: string;
@@ -51,7 +53,7 @@ export interface FlowNodeData {
 
 export interface FlowNode {
   id: string;
-  type: string; // trigger | reply | llm_reply | condition | knowledge | ticket | extract | http | end
+  type: string; // start | trigger | reply | llm_reply | condition | knowledge | ticket | extract | http | end
   position: { x: number; y: number };
   data: FlowNodeData;
 }
@@ -112,6 +114,12 @@ export interface UpdateWorkflowDTO {
 export class WorkflowDomain {
   constructor(private readonly workflow: Workflow) {}
 
+  /** 获取入口节点（优先 start，兼容 trigger） */
+  getEntryNode(): FlowNode | undefined {
+    return this.workflow.graph.nodes.find(n => n.type === 'start')
+      || this.workflow.graph.nodes.find(n => n.type === 'trigger');
+  }
+
   /** 获取触发器节点 */
   getTriggerNode(): FlowNode | undefined {
     return this.workflow.graph.nodes.find(n => n.type === 'trigger');
@@ -137,9 +145,9 @@ export class WorkflowDomain {
       errors.push('工作流至少需要一个节点');
     }
 
-    const trigger = this.getTriggerNode();
-    if (!trigger) {
-      errors.push('缺少触发器节点');
+    const entry = this.getEntryNode();
+    if (!entry) {
+      errors.push('缺少入口节点（开始节点或触发器节点）');
     }
 
     const endNodes = this.getEndNodes();
@@ -154,7 +162,7 @@ export class WorkflowDomain {
       connectedNodeIds.add(edge.target);
     }
     for (const node of nodes) {
-      if (node.type !== 'trigger' && !connectedNodeIds.has(node.id)) {
+      if (node.type !== 'trigger' && node.type !== 'start' && !connectedNodeIds.has(node.id)) {
         errors.push(`节点 "${node.data.label || node.id}" 未连接到任何边`);
       }
     }
@@ -164,7 +172,7 @@ export class WorkflowDomain {
 
   /** 是否可以执行 */
   canExecute(): boolean {
-    return this.workflow.enabled && this.getTriggerNode() !== undefined;
+    return this.workflow.enabled && this.getEntryNode() !== undefined;
   }
 
   /** 包装的原始数据 */
