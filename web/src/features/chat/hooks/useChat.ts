@@ -54,9 +54,14 @@ export function useChat(
     }
   }, [conversationId]);
 
-  // 初始化加载对话列表
+  // 初始化加载对话列表 + 自动选中最近对话
   useEffect(() => {
-    loadConversations();
+    loadConversations().then(data => {
+      // 如果当前没有选中对话且列表不为空，自动跳转到最近的对话
+      if (!conversationId && data.length > 0) {
+        onNavigate(data[0].id);
+      }
+    });
   }, [loadConversations]);
 
   // 新建对话
