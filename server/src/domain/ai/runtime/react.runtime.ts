@@ -69,13 +69,10 @@ export class ReactRuntime implements IAgentRuntime {
       if (action) enabledActions.set(name, action);
     }
 
-    // ① 工作流匹配
-    const matchedWorkflow = await this.workflowService.matchWorkflow(userText);
-    if (matchedWorkflow) {
-      // 检查是否在蓝图关联的工作流范围内
-      if (config.workflowIds.length > 0 && !config.workflowIds.includes(matchedWorkflow.id)) {
-        console.log(`[ReactRuntime] 工作流 ${matchedWorkflow.id} 不在蓝图范围内，跳过`);
-      } else {
+    // ① 工作流匹配（仅当配置了可触发工作流时才启用）
+    if (config.workflowIds && config.workflowIds.length > 0) {
+      const matchedWorkflow = await this.workflowService.matchWorkflow(userText);
+      if (matchedWorkflow && config.workflowIds.includes(matchedWorkflow.id)) {
         console.log(`[ReactRuntime] 🔄 工作流匹配: ${matchedWorkflow.name}`);
         yield `data: ${JSON.stringify({
           type: 'workflow_match',
@@ -117,8 +114,12 @@ export class ReactRuntime implements IAgentRuntime {
       }
     }
 
-    // ② 技能匹配
-    const matchedSkills = await this.skillService.matchByText(userText);
+    // ② 技能匹配（仅当配置了可触发技能时才启用）
+    let matchedSkills: { id: string; name: string; prompt: string; icon: string }[] = [];
+    if (config.skillIds && config.skillIds.length > 0) {
+      const allMatched = await this.skillService.matchByText(userText);
+      matchedSkills = allMatched.filter(s => config.skillIds.includes(s.id));
+    }
     const systemPrompt = await this.buildSystemPrompt(config, context.conversationId, matchedSkills);
 
     if (matchedSkills.length > 0) {

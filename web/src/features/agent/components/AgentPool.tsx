@@ -218,7 +218,7 @@ const AgentPool: React.FC = () => {
             {/* 可触发技能 */}
             <div style={styles.field}>
               <label style={styles.label}>🎯 可触发技能
-                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 全部</span>
+                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>不勾选则不启用</span>
               </label>
               {skills.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无技能</div>
@@ -260,7 +260,7 @@ const AgentPool: React.FC = () => {
             {/* 可触发工作流 */}
             <div style={styles.field}>
               <label style={styles.label}>🔄 可触发工作流
-                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 全部</span>
+                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>不勾选则不启用</span>
               </label>
               {workflows.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无工作流</div>

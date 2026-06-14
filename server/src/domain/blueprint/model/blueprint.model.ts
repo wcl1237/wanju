@@ -105,6 +105,8 @@ export type HarnessStepConfig =
 export interface StandaloneRuntimeConfig {
   agentId: string;
   actions: string[];
+  skillIds: string[];     // 可触发技能 ID
+  workflowIds: string[];  // 可触发工作流 ID
 }
 
 /** 统一运行时配置 */
