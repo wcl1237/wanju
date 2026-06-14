@@ -4,6 +4,8 @@ export interface Agent {
   description: string;
   prompt: string;
   actions: string[];
+  skillIds: string[];
+  workflowIds: string[];
   icon: string;
   enabled: boolean;
   createdAt: string;
@@ -15,6 +17,8 @@ export interface CreateAgentDTO {
   description?: string;
   prompt?: string;
   actions?: string[];
+  skillIds?: string[];
+  workflowIds?: string[];
   icon?: string;
 }
 
@@ -23,6 +27,8 @@ export interface UpdateAgentDTO {
   description?: string;
   prompt?: string;
   actions?: string[];
+  skillIds?: string[];
+  workflowIds?: string[];
   icon?: string;
   enabled?: boolean;
 }

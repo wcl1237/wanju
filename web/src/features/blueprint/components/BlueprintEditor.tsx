@@ -5,8 +5,10 @@ import { RUNTIME_TYPE_META } from '../types';
 import * as blueprintApi from '../api';
 import { getWorkflows } from '../../workflow/api';
 import { getAgents } from '../../agent/api';
+import { getSkills } from '../../skill/api';
 import type { Workflow } from '../../workflow/types';
 import type { Agent } from '../../agent/types';
+import type { Skill } from '../../skill/types';
 
 const AVAILABLE_ACTIONS = [
   { name: 'search_knowledge', label: '知识检索', icon: '📚' },
@@ -113,6 +115,24 @@ const BlueprintEditor: React.FC = () => {
 /** ReAct 配置面板 */
 const ReactConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }> = ({ config, onChange }) => {
   const update = (key: string, val: any) => onChange({ ...config, [key]: val });
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loadingRes, setLoadingRes] = useState(true);
+
+  useEffect(() => {
+    setLoadingRes(true);
+    Promise.all([getSkills(), getWorkflows()])
+      .then(([sk, wf]) => { setSkills(sk || []); setWorkflows(wf || []); })
+      .catch(console.error)
+      .finally(() => setLoadingRes(false));
+  }, []);
+
+  const toggleList = (key: string, id: string) => {
+    const list: string[] = config[key] || [];
+    const next = list.includes(id) ? list.filter((x: string) => x !== id) : [...list, id];
+    update(key, next);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={s.field}>
@@ -142,6 +162,72 @@ const ReactConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }> = 
           })}
         </div>
       </div>
+
+      {/* 可触发技能 */}
+      <div style={s.field}>
+        <label style={s.label}>🎯 可触发技能
+          <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 匹配所有启用技能</span>
+        </label>
+        {loadingRes ? (
+          <div style={{ fontSize: 13, color: '#64748b', padding: 8 }}>加载中...</div>
+        ) : skills.length === 0 ? (
+          <div style={{ fontSize: 12, color: '#64748b', padding: 8 }}>暂无技能，请先在「技能」页面创建</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {skills.map(sk => {
+              const checked = (config.skillIds || []).includes(sk.id);
+              const isEnabled = sk.enabled;
+              return (
+                <label key={sk.id} style={{
+                  ...s.checkboxRow,
+                  borderColor: checked ? '#06b6d4' : 'rgba(255,255,255,0.06)',
+                  background: checked ? 'rgba(6,182,212,0.08)' : 'transparent',
+                  opacity: isEnabled ? 1 : 0.5,
+                }} onClick={() => toggleList('skillIds', sk.id)}>
+                  <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${checked ? '#06b6d4' : '#475569'}`, background: checked ? '#06b6d4' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10 }}>{checked ? '✓' : ''}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#67e8f9' : '#e2e8f0' }}>{sk.icon || '🎯'} {sk.name}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{sk.description || sk.keywords?.join(', ') || ''}</div>
+                  </div>
+                  {!isEnabled && <span style={{ fontSize: 10, color: '#f59e0b' }}>已禁用</span>}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 可触发工作流 */}
+      <div style={s.field}>
+        <label style={s.label}>🔄 可触发工作流
+          <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 匹配所有启用工作流</span>
+        </label>
+        {loadingRes ? (
+          <div style={{ fontSize: 13, color: '#64748b', padding: 8 }}>加载中...</div>
+        ) : workflows.length === 0 ? (
+          <div style={{ fontSize: 12, color: '#64748b', padding: 8 }}>暂无工作流，请先在「工作流」页面创建</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {workflows.map(wf => {
+              const checked = (config.workflowIds || []).includes(wf.id);
+              return (
+                <label key={wf.id} style={{
+                  ...s.checkboxRow,
+                  borderColor: checked ? '#f59e0b' : 'rgba(255,255,255,0.06)',
+                  background: checked ? 'rgba(245,158,11,0.08)' : 'transparent',
+                }} onClick={() => toggleList('workflowIds', wf.id)}>
+                  <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${checked ? '#f59e0b' : '#475569'}`, background: checked ? '#f59e0b' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10 }}>{checked ? '✓' : ''}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#fbbf24' : '#e2e8f0' }}>{wf.icon || '🔄'} {wf.name}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{wf.description || ''}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', gap: 16 }}>
         <div style={{ ...s.field, flex: 1 }}>
           <label style={s.label}>最大 ReAct 轮次</label>

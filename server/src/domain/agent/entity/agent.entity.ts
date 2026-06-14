@@ -17,6 +17,12 @@ export class AgentEntity {
   @Column('text', { default: '' })
   actions: string; // 逗号分隔的可用 action 名称
 
+  @Column('text', { name: 'skill_ids', default: '' })
+  skillIds: string; // 逗号分隔的可触发技能 ID
+
+  @Column('text', { name: 'workflow_ids', default: '' })
+  workflowIds: string; // 逗号分隔的可触发工作流 ID
+
   @Column('text', { default: '🧑‍💼' })
   icon: string;
 

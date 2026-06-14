@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as agentApi from '../api';
 import type { Agent } from '../types';
+import { getSkills } from '../../skill/api';
+import { getWorkflows } from '../../workflow/api';
+import type { Skill } from '../../skill/types';
+import type { Workflow } from '../../workflow/types';
 
 const AVAILABLE_ACTIONS: { name: string; label: string; icon: string }[] = [
   { name: 'search_knowledge', label: '知识检索', icon: '📚' },
@@ -12,9 +16,11 @@ const AgentPool: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '', prompt: '', actions: [] as string[], icon: '🧑‍💼' });
+  const [formData, setFormData] = useState({ name: '', description: '', prompt: '', actions: [] as string[], skillIds: [] as string[], workflowIds: [] as string[], icon: '🧑‍💼' });
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -25,15 +31,21 @@ const AgentPool: React.FC = () => {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
+  useEffect(() => {
+    Promise.all([getSkills(), getWorkflows()])
+      .then(([sk, wf]) => { setSkills(sk || []); setWorkflows(wf || []); })
+      .catch(console.error);
+  }, []);
+
   const openNew = () => {
     setEditingAgent(null);
-    setFormData({ name: '', description: '', prompt: '', actions: [], icon: '🧑‍💼' });
+    setFormData({ name: '', description: '', prompt: '', actions: [], skillIds: [], workflowIds: [], icon: '🧑‍💼' });
     setShowForm(true);
   };
 
   const openEdit = (agent: Agent) => {
     setEditingAgent(agent);
-    setFormData({ name: agent.name, description: agent.description, prompt: agent.prompt, actions: agent.actions || [], icon: agent.icon });
+    setFormData({ name: agent.name, description: agent.description, prompt: agent.prompt, actions: agent.actions || [], skillIds: agent.skillIds || [], workflowIds: agent.workflowIds || [], icon: agent.icon });
     setShowForm(true);
   };
 
@@ -201,6 +213,88 @@ const AgentPool: React.FC = () => {
                 })}
               </div>
               <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>勾选后 Agent 在工作流中可调用这些工具</div>
+            </div>
+
+            {/* 可触发技能 */}
+            <div style={styles.field}>
+              <label style={styles.label}>🎯 可触发技能
+                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 全部</span>
+              </label>
+              {skills.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无技能</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {skills.map(sk => {
+                    const checked = formData.skillIds.includes(sk.id);
+                    return (
+                      <label key={sk.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                        borderRadius: 8, border: `1.5px solid ${checked ? '#06b6d4' : 'rgba(255,255,255,0.06)'}`,
+                        background: checked ? 'rgba(6,182,212,0.08)' : 'transparent', cursor: 'pointer',
+                        opacity: sk.enabled ? 1 : 0.5,
+                      }} onClick={() => {
+                        setFormData(f => ({
+                          ...f,
+                          skillIds: checked ? f.skillIds.filter(id => id !== sk.id) : [...f.skillIds, sk.id],
+                        }));
+                      }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                          border: `2px solid ${checked ? '#06b6d4' : '#475569'}`,
+                          background: checked ? '#06b6d4' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 12, fontWeight: 700,
+                        }}>{checked ? '✓' : ''}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#67e8f9' : '#e2e8f0' }}>{sk.icon || '🎯'} {sk.name}</div>
+                          <div style={{ fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{sk.description || sk.keywords?.join(', ') || ''}</div>
+                        </div>
+                        {!sk.enabled && <span style={{ fontSize: 10, color: '#f59e0b' }}>已禁用</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 可触发工作流 */}
+            <div style={styles.field}>
+              <label style={styles.label}>🔄 可触发工作流
+                <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>空 = 全部</span>
+              </label>
+              {workflows.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无工作流</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {workflows.map(wf => {
+                    const checked = formData.workflowIds.includes(wf.id);
+                    return (
+                      <label key={wf.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                        borderRadius: 8, border: `1.5px solid ${checked ? '#f59e0b' : 'rgba(255,255,255,0.06)'}`,
+                        background: checked ? 'rgba(245,158,11,0.08)' : 'transparent', cursor: 'pointer',
+                      }} onClick={() => {
+                        setFormData(f => ({
+                          ...f,
+                          workflowIds: checked ? f.workflowIds.filter(id => id !== wf.id) : [...f.workflowIds, wf.id],
+                        }));
+                      }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                          border: `2px solid ${checked ? '#f59e0b' : '#475569'}`,
+                          background: checked ? '#f59e0b' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 12, fontWeight: 700,
+                        }}>{checked ? '✓' : ''}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#fbbf24' : '#e2e8f0' }}>{wf.icon || '🔄'} {wf.name}</div>
+                          <div style={{ fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{wf.description || ''}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div style={styles.field}>

@@ -24,6 +24,8 @@ export class TypeOrmAgentRepository implements IAgentRepository {
       description: dto.description || '',
       prompt: dto.prompt || '',
       actions: (dto.actions || []).join(','),
+      skillIds: (dto.skillIds || []).join(','),
+      workflowIds: (dto.workflowIds || []).join(','),
       icon: dto.icon || '🧑‍💼',
       enabled: 1,
       createdAt: now,
@@ -40,6 +42,8 @@ export class TypeOrmAgentRepository implements IAgentRepository {
     if (dto.description !== undefined) entity.description = dto.description;
     if (dto.prompt !== undefined) entity.prompt = dto.prompt;
     if (dto.actions !== undefined) entity.actions = dto.actions.join(',');
+    if (dto.skillIds !== undefined) entity.skillIds = dto.skillIds.join(',');
+    if (dto.workflowIds !== undefined) entity.workflowIds = dto.workflowIds.join(',');
     if (dto.icon !== undefined) entity.icon = dto.icon;
     if (dto.enabled !== undefined) entity.enabled = dto.enabled ? 1 : 0;
     entity.updatedAt = new Date().toISOString();
@@ -70,6 +74,8 @@ export class TypeOrmAgentRepository implements IAgentRepository {
       description: e.description,
       prompt: e.prompt,
       actions: e.actions ? e.actions.split(',').map(a => a.trim()).filter(a => a.length > 0) : [],
+      skillIds: e.skillIds ? e.skillIds.split(',').map(a => a.trim()).filter(a => a.length > 0) : [],
+      workflowIds: e.workflowIds ? e.workflowIds.split(',').map(a => a.trim()).filter(a => a.length > 0) : [],
       icon: e.icon || '🧑‍💼',
       enabled: e.enabled === 1,
       createdAt: e.createdAt,
