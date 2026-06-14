@@ -8,7 +8,7 @@ import * as orm from '@midwayjs/typeorm';
 import * as redis from '@midwayjs/redis';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
-import { AuthMiddleware } from './middleware/auth.middleware';
+import { AuthMiddleware } from './interface/middleware/auth.middleware';
 
 // 加载环境变量
 dotenv.config({ path: join(__dirname, '../.env') });

@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import './index.css';
-import { useChat } from './hooks/useChat';
-import { getUser, setUser, removeUser } from './services/api';
-import LoginPage from './pages/LoginPage';
-import TrajectoryPage from './pages/TrajectoryPage';
-import NavSidebar from './components/NavSidebar';
-import type { NavPage } from './components/NavSidebar';
-import Sidebar from './components/Sidebar';
-import ChatPanel from './components/ChatPanel';
-import KnowledgeBase from './components/KnowledgeBase';
-import TicketPanel from './components/TicketPanel';
-import TicketForm from './components/TicketForm';
-import SkillHub from './components/SkillHub';
-import WorkflowPage from './pages/WorkflowPage';
-import WorkflowEditor from './pages/WorkflowEditor';
+import { useChat } from './features/chat/hooks/useChat';
+import { getUser, setUser, removeUser } from './shared/http-client';
+import LoginPage from './features/auth/components/LoginPage';
+import TrajectoryPage from './features/trace/components/TrajectoryPage';
+import NavSidebar from './shared/components/NavSidebar';
+import type { NavPage } from './shared/components/NavSidebar';
+import Sidebar from './features/chat/components/ConversationSidebar';
+import ChatPanel from './features/chat/components/ChatPanel';
+import KnowledgeBase from './features/knowledge/components/KnowledgeBase';
+import TicketPanel from './features/ticket/components/TicketPanel';
+import TicketForm from './features/ticket/components/TicketForm';
+import SkillHub from './features/skill/components/SkillHub';
+import WorkflowPage from './features/workflow/components/WorkflowPage';
+import WorkflowEditor from './features/workflow/components/WorkflowEditor';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
