@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { AgentBlueprint, RuntimeType, UpdateBlueprintDTO } from '../types';
+import type { AgentBlueprint, UpdateBlueprintDTO } from '../types';
 import { RUNTIME_TYPE_META } from '../types';
 import * as blueprintApi from '../api';
+import { getWorkflows } from '../../workflow/api';
+import { getAgents } from '../../agent/api';
+import type { Workflow } from '../../workflow/types';
+import type { Agent } from '../../agent/types';
 
 const AVAILABLE_ACTIONS = [
   { name: 'search_knowledge', label: '知识检索', icon: '📚' },
@@ -165,11 +169,51 @@ const ReactConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }> = 
 /** Workflow 配置面板 */
 const WorkflowConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }> = ({ config, onChange }) => {
   const update = (key: string, val: any) => onChange({ ...config, [key]: val });
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loadingWf, setLoadingWf] = useState(true);
+
+  useEffect(() => {
+    setLoadingWf(true);
+    getWorkflows().then(setWorkflows).catch(console.error).finally(() => setLoadingWf(false));
+  }, []);
+
+  const selected = workflows.find(w => w.id === config.workflowId);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={s.field}>
-        <label style={s.label}>绑定工作流 ID</label>
-        <input style={s.input} value={config.workflowId || ''} onChange={e => update('workflowId', e.target.value)} placeholder="输入工作流 ID" />
+        <label style={s.label}>绑定工作流</label>
+        {loadingWf ? (
+          <div style={{ fontSize: 13, color: '#64748b', padding: 8 }}>加载工作流列表...</div>
+        ) : workflows.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#f59e0b', padding: 8 }}>⚠️ 暂无工作流，请先在「工作流」页面创建</div>
+        ) : (
+          <>
+            <select
+              style={s.select}
+              value={config.workflowId || ''}
+              onChange={e => update('workflowId', e.target.value)}
+            >
+              <option value="">— 请选择工作流 —</option>
+              {workflows.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.icon || '🔄'} {w.name}{w.description ? ` — ${w.description}` : ''}
+                </option>
+              ))}
+            </select>
+            {selected && (
+              <div style={s.selectedHint}>
+                <span style={{ fontSize: 18 }}>{selected.icon || '🔄'}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{selected.name}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    {selected.description || '暂无描述'} · 模式: {selected.mode === 'independent' ? '独立' : '增强'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
       <div style={s.field}>
         <label style={s.label}>兜底回复</label>
@@ -182,11 +226,49 @@ const WorkflowConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }>
 /** Standalone 配置面板 */
 const StandaloneConfigPanel: React.FC<{ config: any; onChange: (c: any) => void }> = ({ config, onChange }) => {
   const update = (key: string, val: any) => onChange({ ...config, [key]: val });
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loadingAg, setLoadingAg] = useState(true);
+
+  useEffect(() => {
+    setLoadingAg(true);
+    getAgents().then(setAgents).catch(console.error).finally(() => setLoadingAg(false));
+  }, []);
+
+  const selected = agents.find(a => a.id === config.agentId);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={s.field}>
-        <label style={s.label}>绑定 Agent ID</label>
-        <input style={s.input} value={config.agentId || ''} onChange={e => update('agentId', e.target.value)} placeholder="输入 Agent 池中的 Agent ID" />
+        <label style={s.label}>绑定 Agent</label>
+        {loadingAg ? (
+          <div style={{ fontSize: 13, color: '#64748b', padding: 8 }}>加载 Agent 列表...</div>
+        ) : agents.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#f59e0b', padding: 8 }}>⚠️ 暂无 Agent，请先在「Agent 池」页面创建</div>
+        ) : (
+          <>
+            <select
+              style={s.select}
+              value={config.agentId || ''}
+              onChange={e => update('agentId', e.target.value)}
+            >
+              <option value="">— 请选择 Agent —</option>
+              {agents.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.icon || '🤖'} {a.name}{a.description ? ` — ${a.description}` : ''}
+                </option>
+              ))}
+            </select>
+            {selected && (
+              <div style={s.selectedHint}>
+                <span style={{ fontSize: 18 }}>{selected.icon || '🤖'}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{selected.name}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>{selected.description || '暂无描述'}</div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
       <div style={s.field}>
         <label style={s.label}>可用工具</label>
@@ -228,6 +310,8 @@ const s: Record<string, React.CSSProperties> = {
   textarea: { width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical' as const, boxSizing: 'border-box' as const },
   checkboxRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.06)', cursor: 'pointer', fontSize: 13, color: '#e2e8f0' },
   toggleLabel: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#94a3b8', cursor: 'pointer' },
+  select: { width: '100%', padding: '10px 12px', background: '#12121f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, cursor: 'pointer', appearance: 'auto' as const },
+  selectedHint: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 },
 };
 
 export default BlueprintEditor;
