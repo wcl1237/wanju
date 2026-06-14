@@ -358,10 +358,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     padding: '10px 16px',
     margin: '4px 0',
-    maxWidth: '200px',
+    maxWidth: '420px',
     borderRadius: '12px',
     background: 'rgba(251, 191, 36, 0.04)',
     border: '1px solid rgba(251, 191, 36, 0.1)',
+    whiteSpace: 'nowrap' as const,
   },
   thinkingPulse: {
     fontSize: '14px',

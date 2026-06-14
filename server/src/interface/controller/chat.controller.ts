@@ -1,9 +1,7 @@
 import { Controller, Get, Post, Del, Inject, Param, Body, Query } from '@midwayjs/core';
 import { Context } from '@midwayjs/koa';
-import { ChatService } from '../../domain/chat/service/chat.service';
-import { ReactAgentService } from '../../domain/ai/service/react-agent.service';
-import { MemoryManagerService } from '../../domain/chat/service/memory-manager.service';
-import { ChatRequest, AIMessage } from '../../domain/ai/model/ai.model';
+import { ChatAppService } from '../../application/chat.app-service';
+import { ChatRequest } from '../../domain/ai/model/ai.model';
 
 @Controller('/api/chat')
 export class ChatController {
@@ -11,29 +9,23 @@ export class ChatController {
   ctx: Context;
 
   @Inject()
-  chatService: ChatService;
-
-  @Inject()
-  aiService: ReactAgentService;
-
-  @Inject()
-  memoryManager: MemoryManagerService;
+  chatAppService: ChatAppService;
 
   @Post('/conversations')
   async createConversation() {
-    const conversation = await this.chatService.createConversation();
+    const conversation = await this.chatAppService.createConversation();
     return { success: true, data: conversation };
   }
 
   @Get('/conversations')
   async getConversations() {
-    const conversations = await this.chatService.getConversations();
+    const conversations = await this.chatAppService.getConversations();
     return { success: true, data: conversations };
   }
 
   @Get('/conversations/:id/messages')
   async getMessages(@Param('id') id: string) {
-    const messages = await this.chatService.getMessages(id);
+    const messages = await this.chatAppService.getMessages(id);
     return { success: true, data: messages };
   }
 
@@ -46,90 +38,64 @@ export class ChatController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string
   ) {
-    const result = await this.memoryManager.getHistory(
+    const result = await this.chatAppService.getHistory(
       id, parseInt(page || '1'), parseInt(pageSize || '20')
     );
     return { success: true, data: result };
   }
 
   /**
-   * 发送消息（SSE 流式响应）— 使用 MemoryManager 管理上下文
-   *
-   * 重构: 从 ~180 行精简为 ~80 行，trace 收集和 SSE 管理更清晰
+   * 发送消息（SSE 流式响应）— 使用 ChatAppService 编排
    */
   @Post('/conversations/:id/messages')
   async sendMessage(@Param('id') id: string, @Body() body: ChatRequest) {
     const { message } = body;
     const userId = this.ctx.state?.user?.userId;
-    const traceSteps: any[] = [];
 
-    // 1. 初始化对话 + 保存用户消息
-    const initStart = Date.now();
-    await this.memoryManager.initConversation(id);
-    traceSteps.push({ type: 'memory_init', timeMs: Date.now() - initStart, ts: Date.now() });
+    // 1. 编排对话流程
+    const { traceSteps, stream } = await this.chatAppService.sendMessage(id, message, userId);
 
-    const addStart = Date.now();
-    await this.memoryManager.addMessage(id, 'user', message);
-    traceSteps.push({ type: 'message_save', timeMs: Date.now() - addStart, ts: Date.now() });
-
-    // 2. 获取 AI 上下文
-    const ctxStart = Date.now();
-    const { messages: aiContext, meta: memoryMeta } = await this.memoryManager.getAIContext(id, userId);
-    traceSteps.push({ type: 'memory_load', timeMs: Date.now() - ctxStart, meta: memoryMeta, ts: Date.now() });
-
-    // 3. 设置 SSE 响应
+    // 2. 设置 SSE 响应
     this.ctx.set('Content-Type', 'text/event-stream');
     this.ctx.set('Cache-Control', 'no-cache');
     this.ctx.set('Connection', 'keep-alive');
     this.ctx.set('X-Accel-Buffering', 'no');
 
     const { PassThrough } = require('stream');
-    const stream = new PassThrough();
-    this.ctx.body = stream;
+    const sseStream = new PassThrough();
+    this.ctx.body = sseStream;
 
     // 发送预处理阶段的轨迹事件
     for (const step of traceSteps) {
-      stream.write(`data: ${JSON.stringify(step)}\n\n`);
+      sseStream.write(`data: ${JSON.stringify(step)}\n\n`);
     }
 
-    // 4. 异步生成 AI 回复
+    // 3. 异步生成 AI 回复
     (async () => {
       let fullContent = '';
       try {
-        for await (const chunk of this.aiService.chatStream(aiContext, id, userId)) {
-          stream.write(chunk);
+        for await (const chunk of stream) {
+          sseStream.write(chunk);
           this.collectTraceStep(chunk, traceSteps);
           const content = this.extractContent(chunk);
           if (content) fullContent += content;
         }
 
-        if (fullContent) {
-          await this.memoryManager.addMessage(id, 'assistant', fullContent);
-        }
-
-        if (traceSteps.length > 0) {
-          await this.chatService.saveTraceSteps(id, 'assistant', traceSteps);
-        }
-
-        await this.memoryManager.checkAndSummarize(id);
-
-        if (userId) {
-          this.memoryManager.extractLongTermMemory(userId, id).catch(e => {
-            console.error('[ChatController] 长期记忆提取失败:', e.message);
-          });
-        }
+        await this.chatAppService.saveAssistantMessage(id, fullContent);
+        await this.chatAppService.saveTraceSteps(id, traceSteps);
+        await this.chatAppService.postProcess(id, userId);
       } catch (error) {
-        stream.write(`data: ${JSON.stringify({ type: 'error', content: '抱歉，AI 服务暂时不可用，请稍后重试。' })}\n\n`);
-        stream.write('data: [DONE]\n\n');
+        sseStream.write(`data: ${JSON.stringify({ type: 'error', content: '抱歉，AI 服务暂时不可用，请稍后重试。' })}\n\n`);
+        sseStream.write('data: [DONE]\n\n');
       } finally {
-        stream.end();
+        sseStream.end();
       }
     })();
   }
 
   @Del('/conversations/:id')
   async deleteConversation(@Param('id') id: string) {
-    await this.chatService.deleteConversation(id);
+    await this.chatAppService.deleteConversation(id);
     return { success: true };
   }
 

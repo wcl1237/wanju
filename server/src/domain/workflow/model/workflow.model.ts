@@ -104,6 +104,75 @@ export interface UpdateWorkflowDTO {
   priority?: number;
 }
 
+// ==================== 领域行为 ====================
+
+/**
+ * 工作流领域模型 — 封装领域行为方法
+ */
+export class WorkflowDomain {
+  constructor(private readonly workflow: Workflow) {}
+
+  /** 获取触发器节点 */
+  getTriggerNode(): FlowNode | undefined {
+    return this.workflow.graph.nodes.find(n => n.type === 'trigger');
+  }
+
+  /** 获取结束节点 */
+  getEndNodes(): FlowNode[] {
+    return this.workflow.graph.nodes.filter(n => n.type === 'end');
+  }
+
+  /** 获取触发类型 */
+  getTriggerType(): string {
+    const trigger = this.getTriggerNode();
+    return trigger?.data?.triggerType || 'intent';
+  }
+
+  /** 验证工作流图结构 */
+  validate(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const { nodes, edges } = this.workflow.graph;
+
+    if (nodes.length === 0) {
+      errors.push('工作流至少需要一个节点');
+    }
+
+    const trigger = this.getTriggerNode();
+    if (!trigger) {
+      errors.push('缺少触发器节点');
+    }
+
+    const endNodes = this.getEndNodes();
+    if (endNodes.length === 0) {
+      errors.push('缺少结束节点');
+    }
+
+    // 检查孤立节点（没有入边也没有出边，且不是 trigger）
+    const connectedNodeIds = new Set<string>();
+    for (const edge of edges) {
+      connectedNodeIds.add(edge.source);
+      connectedNodeIds.add(edge.target);
+    }
+    for (const node of nodes) {
+      if (node.type !== 'trigger' && !connectedNodeIds.has(node.id)) {
+        errors.push(`节点 "${node.data.label || node.id}" 未连接到任何边`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /** 是否可以执行 */
+  canExecute(): boolean {
+    return this.workflow.enabled && this.getTriggerNode() !== undefined;
+  }
+
+  /** 包装的原始数据 */
+  get data(): Workflow {
+    return this.workflow;
+  }
+}
+
 /** 图遍历执行上下文 */
 export interface ExecContext {
   params: Record<string, string>;

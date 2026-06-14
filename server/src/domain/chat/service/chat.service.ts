@@ -1,86 +1,42 @@
 import { Provide, Inject, Scope, ScopeEnum } from '@midwayjs/core';
-import { InjectEntityModel } from '@midwayjs/typeorm';
-import { Repository } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
-import { ConversationEntity } from '../entity/conversation.entity';
-import { MessageEntity } from '../entity/message.entity';
+import { IChatRepository } from '../port/chat.repository';
 import { Conversation } from '../model/conversation.model';
 import { Message } from '../model/message.model';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
 export class ChatService {
-  @InjectEntityModel(ConversationEntity)
-  conversationRepo: Repository<ConversationEntity>;
+  @Inject('chatRepository')
+  chatRepo: IChatRepository;
 
-  @InjectEntityModel(MessageEntity)
-  messageRepo: Repository<MessageEntity>;
-
-  createConversation(title = '新对话'): Conversation {
-    const id = uuidv4();
-    const now = new Date().toISOString();
-    const entity = this.conversationRepo.create({ id, title, createdAt: now, updatedAt: now });
-    this.conversationRepo.save(entity);
-    return { id, title, createdAt: now, updatedAt: now };
+  createConversation(title = '新对话'): Promise<Conversation> {
+    return this.chatRepo.createConversation(title);
   }
 
   async getConversations(): Promise<Conversation[]> {
-    const rows = await this.conversationRepo.find({ order: { updatedAt: 'DESC' } });
-    return rows.map(r => ({ id: r.id, title: r.title, createdAt: r.createdAt, updatedAt: r.updatedAt }));
+    return this.chatRepo.getConversations();
   }
 
   async getMessages(conversationId: string): Promise<Message[]> {
-    const rows = await this.messageRepo.find({
-      where: { conversationId },
-      order: { createdAt: 'ASC' },
-    });
-    return rows.map(r => ({
-      id: r.id, conversationId: r.conversationId,
-      role: r.role as Message['role'], content: r.content,
-      toolCalls: r.toolCalls ? JSON.parse(r.toolCalls) : undefined,
-      toolCallId: r.toolCallId || undefined,
-      traceSteps: r.traceSteps ? JSON.parse(r.traceSteps) : undefined,
-      createdAt: r.createdAt,
-    }));
+    return this.chatRepo.getMessages(conversationId);
   }
 
   async addMessage(
     conversationId: string, role: Message['role'], content: string,
     toolCalls?: any[], toolCallId?: string
   ): Promise<Message> {
-    const id = uuidv4();
-    const now = new Date().toISOString();
-    await this.messageRepo.save({
-      id, conversationId, role, content,
-      toolCalls: toolCalls ? JSON.stringify(toolCalls) : null,
-      toolCallId: toolCallId || null, traceSteps: null, createdAt: now,
-    });
-    await this.conversationRepo.update(conversationId, { updatedAt: now });
-    const msgCount = await this.messageRepo.count({ where: { conversationId, role: 'user' } });
-    if (msgCount === 1 && role === 'user') {
-      const title = content.slice(0, 30) + (content.length > 30 ? '...' : '');
-      await this.conversationRepo.update(conversationId, { title });
-    }
-    return { id, conversationId, role, content, toolCalls, toolCallId, createdAt: now };
+    return this.chatRepo.addMessage(conversationId, role, content, toolCalls, toolCallId);
   }
 
   async saveTraceSteps(conversationId: string, role: string, traceSteps: any[]): Promise<void> {
-    const lastMsg = await this.messageRepo.findOne({
-      where: { conversationId, role },
-      order: { createdAt: 'DESC' },
-    });
-    if (lastMsg) {
-      lastMsg.traceSteps = JSON.stringify(traceSteps);
-      await this.messageRepo.save(lastMsg);
-    }
+    return this.chatRepo.saveTraceSteps(conversationId, role, traceSteps);
   }
 
   async deleteConversation(conversationId: string) {
-    await this.messageRepo.delete({ conversationId });
-    await this.conversationRepo.delete(conversationId);
+    return this.chatRepo.deleteConversation(conversationId);
   }
 
   async updateTitle(conversationId: string, title: string) {
-    await this.conversationRepo.update(conversationId, { title, updatedAt: new Date().toISOString() });
+    return this.chatRepo.updateTitle(conversationId, title);
   }
 }
