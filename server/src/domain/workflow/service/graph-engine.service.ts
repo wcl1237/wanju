@@ -4,6 +4,7 @@ import { Action, ActionContext } from '../../ai/action/action.interface';
 import {
   FlowNode, FlowEdge, FlowNodeData, WorkflowGraph, Workflow, ExecContext,
 } from '../model/workflow.model';
+import { AgentService } from '../../agent/service/agent.service';
 
 /**
  * 工作流图遍历引擎 — 从 trigger 节点出发递归遍历执行
@@ -15,6 +16,9 @@ import {
 export class GraphEngineService {
   @Inject('llmClient')
   llmClient: ILLMClient;
+
+  @Inject()
+  agentService: AgentService;
 
   /**
    * 执行工作流 — 从 trigger 节点出发递归遍历图
@@ -115,23 +119,25 @@ export class GraphEngineService {
 
         case 'end': {
           console.log(`[Workflow] 🏁 到达结束节点: ${nodeId}`);
-          if (execCtx.lastOutput && !execCtx.contentYielded) {
+          // 优先使用标记为“最终回复”的节点输出
+          const finalContent = execCtx.finalReplyContent ?? execCtx.lastOutput;
+          if (finalContent && !execCtx.contentYielded) {
             let isStructured = false;
             try {
-              const parsed = JSON.parse(execCtx.lastOutput);
+              const parsed = JSON.parse(finalContent);
               isStructured = typeof parsed === 'object' && parsed !== null;
             } catch { /* not JSON, treat as text */ }
 
             if (!isStructured) {
-              console.log(`[Workflow] 🏁 透传上一节点输出: "${execCtx.lastOutput.slice(0, 60)}..."`);
-              yield `data: ${JSON.stringify({ type: 'content', content: execCtx.lastOutput })}\n\n`;
+              console.log(`[Workflow] 🏁 输出最终回复: "${finalContent.slice(0, 60)}..."`);
+              yield `data: ${JSON.stringify({ type: 'content', content: finalContent })}\n\n`;
             }
           }
 
           yield `data: ${JSON.stringify({
             type: 'workflow_step', stepIndex: visited.size - 1, nodeId: node.id,
             stepType: 'end', stepName: node.data.label || '结束',
-            output: execCtx.lastOutput ? (typeof execCtx.lastOutput === 'string' ? execCtx.lastOutput.slice(0, 200) : execCtx.lastOutput) : null,
+            output: finalContent ? (typeof finalContent === 'string' ? finalContent.slice(0, 200) : finalContent) : null,
             timeMs: Date.now() - stepStart,
           })}\n\n`;
           return;
@@ -275,6 +281,380 @@ export class GraphEngineService {
           })}\n\n`;
           break;
         }
+
+        case 'agent': {
+          const agentId = node.data.agentId;
+          if (!agentId) {
+            console.warn(`[Workflow] Agent 节点未配置 agentId: ${nodeId}`);
+            break;
+          }
+          const agent = await this.agentService.getById(agentId);
+          if (!agent) {
+            console.warn(`[Workflow] Agent 不存在: ${agentId}`);
+            break;
+          }
+
+          const agentLLMStart = Date.now();
+          yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'start', nodeId: node.id, purpose: `Agent: ${agent.name}`, input: execCtx.userMessage.slice(0, 200) })}\n\n`;
+
+          const resultsSummary = [...execCtx.results.entries()]
+            .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+            .join('\n');
+
+          const agentSystemPrompt = `${agent.prompt}
+
+提取参数: ${JSON.stringify(execCtx.params)}
+${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
+
+          try {
+            let agentReply: string;
+
+            // 如果 Agent 配置了 actions，使用 function calling + ReAct 循环
+            if (agent.actions && agent.actions.length > 0) {
+              const agentTools = this.buildAgentTools(agent.actions, actions);
+              const agentMessages: any[] = [
+                { role: 'system', content: agentSystemPrompt },
+                { role: 'user', content: execCtx.userMessage },
+              ];
+
+              const MAX_AGENT_ROUNDS = 5;
+              agentReply = '';
+
+              for (let r = 0; r < MAX_AGENT_ROUNDS; r++) {
+                const resp = await this.llmClient.chat(agentMessages, {
+                  tools: agentTools.length > 0 ? agentTools : undefined,
+                  toolChoice: agentTools.length > 0 ? 'auto' : undefined,
+                  temperature: 0.7,
+                  maxTokens: 1000,
+                });
+
+                if (!resp.toolCalls || resp.toolCalls.length === 0) {
+                  agentReply = resp.content || '';
+                  break;
+                }
+
+                // 有 tool calls → 执行工具
+                agentMessages.push({
+                  role: 'assistant', content: resp.content || '',
+                  tool_calls: resp.toolCalls,
+                });
+
+                for (const tc of resp.toolCalls) {
+                  const actionName = tc.function.name;
+                  let args: any;
+                  try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+
+                  console.log(`[Workflow] Agent ${agent.name} → Action: ${actionName}(${JSON.stringify(args).slice(0, 80)})`);
+                  yield `data: ${JSON.stringify({ type: 'tool_start', tool: actionName, args, round: r + 1 })}\n\n`;
+
+                  const action = actions.get(actionName);
+                  let toolResult: string;
+                  if (action) {
+                    const result = await action.execute(args, context);
+                    toolResult = result.output;
+                    yield `data: ${JSON.stringify({ type: 'tool_result', tool: actionName, result: result.ssePayload || result.output, round: r + 1 })}\n\n`;
+                  } else {
+                    toolResult = JSON.stringify({ error: `未知工具: ${actionName}` });
+                  }
+
+                  agentMessages.push({ role: 'tool', content: toolResult, tool_call_id: tc.id });
+                }
+              }
+
+              if (!agentReply) {
+                // 超过最大轮次，取最后内容
+                const lastResp = await this.llmClient.chat(agentMessages, { temperature: 0.7, maxTokens: 1000 });
+                agentReply = lastResp.content || '工作流 Agent 执行完成。';
+              }
+            } else {
+              // 无 actions，简单 complete
+              const simplePrompt = `${agentSystemPrompt}\n\n用户消息: ${execCtx.userMessage}\n\n请根据以上信息回复用户。`;
+              agentReply = await this.llmClient.complete(simplePrompt, { temperature: 0.7, maxTokens: 1000 });
+            }
+
+            yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'end', nodeId: node.id, purpose: `Agent: ${agent.name}`, timeMs: Date.now() - agentLLMStart })}\n\n`;
+
+            nodeResult = agentReply;
+            execCtx.lastOutput = agentReply;
+            execCtx.contentYielded = false;
+
+            yield `data: ${JSON.stringify({
+              type: 'workflow_step', stepIndex: visited.size - 1, nodeId: node.id,
+              stepType: 'agent', stepName: `Agent: ${agent.name}`,
+              result: agentReply.slice(0, 500), timeMs: Date.now() - stepStart,
+            })}\n\n`;
+          } catch (agentErr) {
+            yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'end', nodeId: node.id, purpose: `Agent: ${agent.name}`, timeMs: Date.now() - agentLLMStart })}\n\n`;
+            throw agentErr;
+          }
+          break;
+        }
+
+        case 'agent_team': {
+          const agentIds = node.data.agentIds || [];
+          if (agentIds.length === 0) {
+            console.warn(`[Workflow] Agent Teams 节点未配置 agentIds: ${nodeId}`);
+            break;
+          }
+
+          const teamAgents = (await Promise.all(agentIds.map(id => this.agentService.getById(id))))
+            .filter(a => a !== undefined);
+
+          if (teamAgents.length === 0) { break; }
+
+          const teamStart = Date.now();
+          yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'start', nodeId: node.id, purpose: `Agent Teams (${teamAgents.length})`, input: execCtx.userMessage.slice(0, 200) })}\n\n`;
+
+          // 共享黑板
+          const blackboard = new Map<string, string>();
+
+          const resultsSummary = [...execCtx.results.entries()]
+            .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+            .join('\n');
+
+          // 并行执行所有 Agent
+          const teamResults = await Promise.all(teamAgents.map(async (agent) => {
+            const bbReadTool = {
+              type: 'function', function: {
+                name: 'blackboard_read', description: '从共享黑板读取数据',
+                parameters: { type: 'object', properties: { key: { type: 'string', description: '键名' } }, required: ['key'] },
+              },
+            };
+            const bbWriteTool = {
+              type: 'function', function: {
+                name: 'blackboard_write', description: '向共享黑板写入数据，其他 Agent 可以读取',
+                parameters: { type: 'object', properties: { key: { type: 'string', description: '键名' }, value: { type: 'string', description: '值' } }, required: ['key', 'value'] },
+              },
+            };
+
+            const agentTools = [bbReadTool, bbWriteTool, ...this.buildAgentTools(agent.actions || [], actions)];
+            const sysPrompt = `${agent.prompt}\n\n你是 Agent Teams 中的一员，与其他 Agent 并行协作。\n你可以通过 blackboard_write 向共享黑板写入信息，通过 blackboard_read 读取其他 Agent 写入的信息。\n\n提取参数: ${JSON.stringify(execCtx.params)}\n${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
+
+            const msgs: any[] = [
+              { role: 'system', content: sysPrompt },
+              { role: 'user', content: execCtx.userMessage },
+            ];
+
+            let reply = '';
+            for (let r = 0; r < 5; r++) {
+              const resp = await this.llmClient.chat(msgs, {
+                tools: agentTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 800,
+              });
+
+              if (!resp.toolCalls || resp.toolCalls.length === 0) {
+                reply = resp.content || '';
+                break;
+              }
+
+              msgs.push({ role: 'assistant', content: resp.content || '', tool_calls: resp.toolCalls });
+
+              for (const tc of resp.toolCalls) {
+                const fn = tc.function.name;
+                let args: any;
+                try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+
+                let toolResult: string;
+                if (fn === 'blackboard_write') {
+                  blackboard.set(args.key, args.value);
+                  toolResult = JSON.stringify({ success: true, key: args.key });
+                } else if (fn === 'blackboard_read') {
+                  toolResult = JSON.stringify({ key: args.key, value: blackboard.get(args.key) || null });
+                } else {
+                  const action = actions.get(fn);
+                  if (action) {
+                    const result = await action.execute(args, context);
+                    toolResult = result.output;
+                  } else {
+                    toolResult = JSON.stringify({ error: `未知工具: ${fn}` });
+                  }
+                }
+                msgs.push({ role: 'tool', content: toolResult, tool_call_id: tc.id });
+              }
+            }
+
+            if (!reply) {
+              const last = await this.llmClient.chat(msgs, { temperature: 0.7, maxTokens: 800 });
+              reply = last.content || '';
+            }
+
+            return { name: agent.name, output: reply };
+          }));
+
+          yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'end', nodeId: node.id, purpose: `Agent Teams (${teamAgents.length})`, timeMs: Date.now() - teamStart })}\n\n`;
+
+          const combinedOutput = teamResults.map(r => `【${r.name}】\n${r.output}`).join('\n\n');
+          nodeResult = combinedOutput;
+          execCtx.lastOutput = combinedOutput;
+          execCtx.contentYielded = false;
+
+          // 将黑板内容也存入 results
+          if (blackboard.size > 0) {
+            execCtx.results.set(`${nodeId}_blackboard`, Object.fromEntries(blackboard));
+          }
+
+          yield `data: ${JSON.stringify({
+            type: 'workflow_step', stepIndex: visited.size - 1, nodeId: node.id,
+            stepType: 'agent_team', stepName: `Agent Teams (${teamAgents.map(a => a.name).join(', ')})`,
+            result: combinedOutput.slice(0, 500), timeMs: Date.now() - stepStart,
+          })}\n\n`;
+          break;
+        }
+
+        case 'master_sub_agent': {
+          const masterId = node.data.masterAgentId;
+          const subIds = node.data.subAgentIds || [];
+
+          if (!masterId) {
+            console.warn(`[Workflow] Master-Sub 节点未配置 masterAgentId: ${nodeId}`);
+            break;
+          }
+
+          const masterAgent = await this.agentService.getById(masterId);
+          if (!masterAgent) {
+            console.warn(`[Workflow] Master Agent 不存在: ${masterId}`);
+            break;
+          }
+
+          const subAgents = (await Promise.all(subIds.map(id => this.agentService.getById(id))))
+            .filter(a => a !== undefined);
+
+          const masterStart = Date.now();
+          yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'start', nodeId: node.id, purpose: `Master: ${masterAgent.name}`, input: execCtx.userMessage.slice(0, 200) })}\n\n`;
+
+          const resultsSummaryMS = [...execCtx.results.entries()]
+            .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+            .join('\n');
+
+          // 构建 call_sub_agent 工具
+          const subAgentTool = {
+            type: 'function', function: {
+              name: 'call_sub_agent',
+              description: `调用一个 Sub Agent 执行任务。可用的 Sub Agent: ${subAgents.map(a => `"${a.name}" (${a.description || '无描述'})`).join('; ')}`,
+              parameters: {
+                type: 'object',
+                properties: {
+                  agent_name: { type: 'string', description: '要调用的 Sub Agent 名称', enum: subAgents.map(a => a.name) },
+                  task: { type: 'string', description: '分配给 Sub Agent 的任务描述' },
+                },
+                required: ['agent_name', 'task'],
+              },
+            },
+          };
+
+          const masterTools = [subAgentTool, ...this.buildAgentTools(masterAgent.actions || [], actions)];
+
+          const masterSysPrompt = `${masterAgent.prompt}\n\n你是 Master Agent，负责编排和协调以下 Sub Agent：\n${subAgents.map(a => `- ${a.name}: ${a.description || '无描述'}`).join('\n')}\n\n使用 call_sub_agent 工具来分配任务给合适的 Sub Agent。你可以多次调用不同的 Sub Agent，然后综合他们的结果给出最终回复。\n\n提取参数: ${JSON.stringify(execCtx.params)}\n${resultsSummaryMS ? `上游节点结果:\n${resultsSummaryMS}` : ''}`;
+
+          const masterMsgs: any[] = [
+            { role: 'system', content: masterSysPrompt },
+            { role: 'user', content: execCtx.userMessage },
+          ];
+
+          let masterReply = '';
+          const MAX_MASTER_ROUNDS = 8;
+
+          for (let r = 0; r < MAX_MASTER_ROUNDS; r++) {
+            const resp = await this.llmClient.chat(masterMsgs, {
+              tools: masterTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 1000,
+            });
+
+            if (!resp.toolCalls || resp.toolCalls.length === 0) {
+              masterReply = resp.content || '';
+              break;
+            }
+
+            masterMsgs.push({ role: 'assistant', content: resp.content || '', tool_calls: resp.toolCalls });
+
+            for (const tc of resp.toolCalls) {
+              const fn = tc.function.name;
+              let args: any;
+              try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+
+              let toolResult: string;
+
+              if (fn === 'call_sub_agent') {
+                const subAgent = subAgents.find(a => a.name === args.agent_name);
+                if (!subAgent) {
+                  toolResult = JSON.stringify({ error: `Sub Agent 不存在: ${args.agent_name}` });
+                } else {
+                  console.log(`[Workflow] Master ${masterAgent.name} → Sub ${subAgent.name}: "${(args.task || '').slice(0, 60)}"`);
+                  yield `data: ${JSON.stringify({ type: 'tool_start', tool: `sub_agent:${subAgent.name}`, args: { task: args.task }, round: r + 1 })}\n\n`;
+
+                  // 执行 Sub Agent
+                  const subPrompt = `${subAgent.prompt}\n\n你是被 Master Agent 调用的 Sub Agent。\nMaster 分配的任务: ${args.task}\n用户原始消息: ${execCtx.userMessage}\n提取参数: ${JSON.stringify(execCtx.params)}`;
+
+                  const subMsgs: any[] = [
+                    { role: 'system', content: subPrompt },
+                    { role: 'user', content: args.task },
+                  ];
+
+                  const subTools = this.buildAgentTools(subAgent.actions || [], actions);
+                  let subReply = '';
+
+                  for (let sr = 0; sr < 3; sr++) {
+                    const subResp = await this.llmClient.chat(subMsgs, {
+                      tools: subTools.length > 0 ? subTools : undefined,
+                      toolChoice: subTools.length > 0 ? 'auto' : undefined,
+                      temperature: 0.7, maxTokens: 800,
+                    });
+
+                    if (!subResp.toolCalls || subResp.toolCalls.length === 0) {
+                      subReply = subResp.content || '';
+                      break;
+                    }
+
+                    subMsgs.push({ role: 'assistant', content: subResp.content || '', tool_calls: subResp.toolCalls });
+                    for (const stc of subResp.toolCalls) {
+                      const sfn = stc.function.name;
+                      let sargs: any;
+                      try { sargs = JSON.parse(stc.function.arguments); } catch { sargs = {}; }
+                      const saction = actions.get(sfn);
+                      const sresult = saction ? (await saction.execute(sargs, context)).output : JSON.stringify({ error: `未知工具: ${sfn}` });
+                      subMsgs.push({ role: 'tool', content: sresult, tool_call_id: stc.id });
+                    }
+                  }
+
+                  if (!subReply) {
+                    const lastSub = await this.llmClient.chat(subMsgs, { temperature: 0.7, maxTokens: 800 });
+                    subReply = lastSub.content || '';
+                  }
+
+                  toolResult = subReply;
+                  yield `data: ${JSON.stringify({ type: 'tool_result', tool: `sub_agent:${subAgent.name}`, result: subReply.slice(0, 500), round: r + 1 })}\n\n`;
+                }
+              } else {
+                // Master 自身的 action
+                const action = actions.get(fn);
+                if (action) {
+                  const result = await action.execute(args, context);
+                  toolResult = result.output;
+                } else {
+                  toolResult = JSON.stringify({ error: `未知工具: ${fn}` });
+                }
+              }
+
+              masterMsgs.push({ role: 'tool', content: toolResult, tool_call_id: tc.id });
+            }
+          }
+
+          if (!masterReply) {
+            const lastMaster = await this.llmClient.chat(masterMsgs, { temperature: 0.7, maxTokens: 1000 });
+            masterReply = lastMaster.content || '编排完成。';
+          }
+
+          yield `data: ${JSON.stringify({ type: 'workflow_llm', stage: 'end', nodeId: node.id, purpose: `Master: ${masterAgent.name}`, timeMs: Date.now() - masterStart })}\n\n`;
+
+          nodeResult = masterReply;
+          execCtx.lastOutput = masterReply;
+          execCtx.contentYielded = false;
+
+          yield `data: ${JSON.stringify({
+            type: 'workflow_step', stepIndex: visited.size - 1, nodeId: node.id,
+            stepType: 'master_sub_agent', stepName: `Master: ${masterAgent.name}`,
+            result: masterReply.slice(0, 500), timeMs: Date.now() - stepStart,
+          })}\n\n`;
+          break;
+        }
       }
     } catch (e) {
       console.error(`[Workflow] 节点 ${nodeId} 执行失败:`, e.message);
@@ -287,6 +667,12 @@ export class GraphEngineService {
 
     if (nodeResult !== null) {
       execCtx.results.set(nodeId, nodeResult);
+    }
+
+    // 检查是否标记为最终回复，后面的覆盖前面的
+    if (node.data.isFinalReply && execCtx.lastOutput) {
+      console.log(`[Workflow] 📤 捕获最终回复节点: ${nodeId}`);
+      execCtx.finalReplyContent = execCtx.lastOutput;
     }
 
     // ---- 获取下游节点并递归 ----
@@ -399,5 +785,21 @@ ${resultsSummary}
   /** 模板替换 {{paramName}} */
   private templateReplace(template: string, params: Record<string, string>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_, name) => params[name] || '');
+  }
+
+  /** 根据 Agent 配置的 action 名称列表，从全局 actions 中筛选并构建 tools */
+  private buildAgentTools(agentActions: string[], allActions: Map<string, Action>): any[] {
+    const tools: any[] = [];
+    for (const actionName of agentActions) {
+      const action = allActions.get(actionName);
+      if (action) {
+        const def = action.definition();
+        tools.push({
+          type: 'function',
+          function: { name: def.name, description: def.description, parameters: def.parameters },
+        });
+      }
+    }
+    return tools;
   }
 }

@@ -92,22 +92,65 @@ export class WorkflowService {
     });
     if (allEnabled.length === 0) return null;
 
-    // 关键词预过滤
     const msgLower = userMessage.toLowerCase();
+
+    // 按触发类型分类处理
+    const intentWorkflows: WorkflowEntity[] = [];
+
     for (const entity of allEnabled) {
       try {
         const graph = JSON.parse(entity.graph || '{}');
         const triggerNode = (graph.nodes || []).find((n: any) => n.type === 'trigger');
-        const keywords: string[] = triggerNode?.data?.keywords || [];
-        if (keywords.length > 0 && keywords.some(kw => kw && msgLower.includes(kw.toLowerCase()))) {
-          console.log(`[Workflow] ⚡ 关键词命中: "${entity.name}" (跳过 LLM 匹配)`);
-          return this.toWorkflow(entity);
+        const triggerType: string = triggerNode?.data?.triggerType || 'intent'; // 默认意图识别
+
+        switch (triggerType) {
+          case 'always': {
+            // 始终触发 — 立即匹配
+            console.log(`[Workflow] ⚡ 始终触发: "${entity.name}"`);
+            return this.toWorkflow(entity);
+          }
+
+          case 'keyword': {
+            // 关键词匹配
+            const keywords: string[] = triggerNode?.data?.keywords || [];
+            if (keywords.length > 0 && keywords.some(kw => kw && msgLower.includes(kw.toLowerCase()))) {
+              console.log(`[Workflow] ⚡ 关键词命中: "${entity.name}" (跳过 LLM 匹配)`);
+              return this.toWorkflow(entity);
+            }
+            break;
+          }
+
+          case 'regex': {
+            // 正则匹配
+            const pattern = triggerNode?.data?.regexPattern;
+            if (pattern) {
+              try {
+                const regex = new RegExp(pattern, 'i');
+                if (regex.test(userMessage)) {
+                  console.log(`[Workflow] ⚡ 正则命中: "${entity.name}" (pattern: ${pattern})`);
+                  return this.toWorkflow(entity);
+                }
+              } catch (regexErr) {
+                console.warn(`[Workflow] 正则表达式无效: "${pattern}"`, regexErr);
+              }
+            }
+            break;
+          }
+
+          case 'intent':
+          default: {
+            // 意图识别 — 收集后统一用 LLM 匹配
+            intentWorkflows.push(entity);
+            break;
+          }
         }
       } catch { /* ignore parse errors */ }
     }
 
-    // LLM 意图匹配
-    const workflowList = allEnabled
+    // LLM 意图匹配（仅对 intent 类型的工作流）
+    if (intentWorkflows.length === 0) return null;
+
+    const workflowList = intentWorkflows
       .map((w, i) => `[${i + 1}] ID: ${w.id}\n   触发条件: ${w.triggerDescription}`)
       .join('\n');
 
@@ -125,7 +168,7 @@ ${workflowList}
       const content = await this.llmClient.complete(prompt, { temperature: 0.1, maxTokens: 200 });
       console.log(`[Workflow] LLM 意图匹配结果: "${content}"`);
       if (content.toLowerCase() === 'none') return null;
-      const matchedEntity = allEnabled.find(w => content.includes(w.id));
+      const matchedEntity = intentWorkflows.find(w => content.includes(w.id));
       if (matchedEntity) {
         console.log(`[Workflow] ✅ 匹配到工作流: ${matchedEntity.name}`);
         return this.toWorkflow(matchedEntity);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect, createContext, useContext } from 'react';
 import {
   ReactFlow,
   Background,
@@ -18,29 +18,50 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import * as workflowApi from '../api';
+import { getUser } from '../../../shared/http-client';
+import * as agentApi from '../../agent/api';
+import type { Agent } from '../../agent/types';
+
+/** 基于用户ID生成节点ID */
+function generateNodeId(type: string): string {
+  const user = getUser();
+  const uid = user?.id?.slice(0, 6) || 'anon';
+  const ts = Date.now().toString(36); // 紧凑时间戳
+  return `${uid}_${type}_${ts}`;
+}
 
 // ==================== 节点类型定义 ====================
 
 const NODE_TYPES_META: Record<string, { icon: string; label: string; color: string; desc: string }> = {
-  trigger:    { icon: '⚡', label: '触发器',   color: '#10b981', desc: '工作流起始入口' },
-  end:        { icon: '🏁', label: '结束',     color: '#ef4444', desc: '工作流终止节点' },
-  reply:      { icon: '💬', label: '消息回复', color: '#3b82f6', desc: '发送固定文本回复' },
-  llm_reply:  { icon: '🤖', label: 'AI 生成',  color: '#a855f7', desc: 'LLM 生成动态回复' },
-  condition:  { icon: '🔀', label: '条件分支', color: '#f59e0b', desc: '根据条件走不同分支' },
-  knowledge:  { icon: '📚', label: '知识检索', color: '#06b6d4', desc: '搜索知识库' },
-  ticket:     { icon: '🎫', label: '创建工单', color: '#ec4899', desc: '创建客服工单' },
-  extract:    { icon: '📝', label: '参数提取', color: '#f97316', desc: '从消息提取关键参数' },
-  http:       { icon: '🌐', label: 'HTTP 请求', color: '#64748b', desc: '调用外部 API' },
+  trigger: { icon: '⚡', label: '触发器', color: '#10b981', desc: '工作流起始入口' },
+  end: { icon: '🏁', label: '结束', color: '#b2a9a9ff', desc: '工作流终止节点' },
+  reply: { icon: '💬', label: '消息回复', color: '#3b82f6', desc: '发送固定文本回复' },
+  llm_reply: { icon: '🤖', label: 'AI 生成', color: '#a855f7', desc: 'LLM 生成动态回复' },
+  agent: { icon: '🧑‍💼', label: '单 Agent', color: '#8b5cf6', desc: '调用 Agent 池中的 Agent' },
+  agent_team: { icon: '👥', label: 'Agent Teams', color: '#0ea5e9', desc: '多 Agent 并行协作' },
+  master_sub_agent: { icon: '👑', label: 'Master-Sub', color: '#d946ef', desc: 'Master 编排 Sub Agent' },
+  condition: { icon: '🔀', label: '条件分支', color: '#f59e0b', desc: '根据条件走不同分支' },
+  knowledge: { icon: '📚', label: '知识检索', color: '#06b6d4', desc: '搜索知识库' },
+  ticket: { icon: '🎫', label: '创建工单', color: '#ec4899', desc: '创建客服工单' },
+  extract: { icon: '📝', label: '参数提取', color: '#f97316', desc: '从消息提取关键参数' },
+  http: { icon: '🌐', label: 'HTTP 请求', color: '#64748b', desc: '调用外部 API' },
 };
 
-// ==================== 自定义节点组件 ====================
+// 方向上下文
+type FlowDirection = 'TB' | 'LR';
+const DirectionContext = createContext<FlowDirection>('TB');
 
-function CustomNode({ data, type, selected }: NodeProps) {
+// ==================== 自定义节点组件 ======================================
+
+function CustomNode({ id, data, type, selected }: NodeProps) {
+  const direction = useContext(DirectionContext);
   const meta = NODE_TYPES_META[type || 'trigger'] || NODE_TYPES_META.trigger;
   const summary = getNodeSummary(type || '', data as Record<string, any>);
   const isCondition = type === 'condition';
   const isTrigger = type === 'trigger';
   const isEnd = type === 'end';
+  const targetPos = direction === 'LR' ? Position.Left : Position.Top;
+  const sourcePos = direction === 'LR' ? Position.Right : Position.Bottom;
 
   return (
     <div style={{
@@ -50,40 +71,72 @@ function CustomNode({ data, type, selected }: NodeProps) {
     }}>
       {/* 入口 Handle */}
       {!isTrigger && (
-        <Handle type="target" position={Position.Top} style={nodeStyles.handle} />
+        <Handle type="target" position={targetPos} style={nodeStyles.handle} />
       )}
 
       {/* 头部 */}
-      <div style={{ ...nodeStyles.header, borderColor: meta.color }}>
-        <span style={{ ...nodeStyles.icon, background: `${meta.color}20`, color: meta.color }}>{meta.icon}</span>
-        <span style={{ ...nodeStyles.label, color: meta.color }}>{(data as any).label || meta.label}</span>
+      <div style={{ ...nodeStyles.header, borderColor: meta.color, background: meta.color }}>
+        <span style={{ ...nodeStyles.icon, color: '#fff' }}>{meta.icon}</span>
+        <span style={{ fontSize: 14, color: '#fff', fontWeight: 700 }}>{meta.label}</span>
       </div>
 
       {/* 摘要 */}
       {summary && <div style={nodeStyles.summary}>{summary}</div>}
 
+      {/* 最终回复标记 */}
+      {(data as any).isFinalReply && (
+        <div style={{ padding: '3px 14px 6px', fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>📤 最终回复</div>
+      )}
+
       {/* 出口 Handle */}
       {isCondition ? (
         <>
-          <Handle type="source" position={Position.Bottom} id="true"
-            style={{ ...nodeStyles.handle, left: '30%', background: '#10b981' }} />
-          <Handle type="source" position={Position.Bottom} id="false"
-            style={{ ...nodeStyles.handle, left: '70%', background: '#ef4444' }} />
-          <div style={nodeStyles.handleLabels}>
-            <span style={{ color: '#10b981', fontSize: 10 }}>✅</span>
-            <span style={{ color: '#ef4444', fontSize: 10 }}>❌</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 14px 6px' }}>
+            <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>✅ 是</span>
+            <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>❌ 否</span>
           </div>
+          {direction === 'LR' ? (
+            <>
+              <Handle type="source" position={Position.Right} id="true"
+                style={{ ...nodeStyles.handle, top: '35%', background: '#10b981' }} />
+              <Handle type="source" position={Position.Right} id="false"
+                style={{ ...nodeStyles.handle, top: '65%', background: '#ef4444' }} />
+            </>
+          ) : (
+            <>
+              <Handle type="source" position={Position.Bottom} id="true"
+                style={{ ...nodeStyles.handle, left: '30%', background: '#10b981' }} />
+              <Handle type="source" position={Position.Bottom} id="false"
+                style={{ ...nodeStyles.handle, left: '70%', background: '#ef4444' }} />
+            </>
+          )}
         </>
       ) : !isEnd ? (
-        <Handle type="source" position={Position.Bottom} style={nodeStyles.handle} />
+        <Handle type="source" position={sourcePos} style={nodeStyles.handle} />
       ) : null}
     </div>
   );
 }
 
+const TRIGGER_TYPE_LABELS: Record<string, string> = {
+  keyword: '🔑 关键词匹配',
+  intent: '🧠 意图识别',
+  always: '🔄 始终触发',
+  regex: '📐 正则匹配',
+};
+
 function getNodeSummary(type: string, data: Record<string, any>): string {
   switch (type) {
-    case 'trigger': return data.triggerDesc ? data.triggerDesc.slice(0, 30) : '触发条件';
+    case 'trigger': {
+      const tt = data.triggerType || 'intent';
+      const label = TRIGGER_TYPE_LABELS[tt] || '触发条件';
+      if (tt === 'keyword' && data.keywords?.length) return `${label}：${data.keywords.slice(0, 3).join(', ')}`;
+      if (tt === 'regex' && data.regexPattern) return `${label}：/${data.regexPattern.slice(0, 16)}/`;
+      if (tt === 'always') return label;
+      if (tt === 'intent' && data.triggerDesc) return `${label}：${data.triggerDesc.slice(0, 20)}`;
+      return label;
+    }
+    case 'end': return '流程终止节点';
     case 'extract': return data.params?.length ? `提取: ${data.params.join(', ')}` : '';
     case 'condition': return data.conditionField ? `${data.conditionField} ${data.conditionOp || '?'} ${data.conditionValue || ''}` : '';
     case 'reply': return data.replyText ? data.replyText.slice(0, 30) + (data.replyText.length > 30 ? '...' : '') : '';
@@ -91,6 +144,13 @@ function getNodeSummary(type: string, data: Record<string, any>): string {
     case 'knowledge': return data.query ? `查询: ${data.query.slice(0, 20)}` : '搜索知识库';
     case 'ticket': return data.title || '创建工单';
     case 'http': return data.url ? `${data.method || 'GET'} ${data.url.slice(0, 25)}` : '';
+    case 'agent': return data.agentName ? `Agent: ${data.agentName}` : '未选择 Agent';
+    case 'agent_team': return data.agentNames?.length ? `团队: ${data.agentNames.join(', ')}` : '未选择 Agent';
+    case 'master_sub_agent': {
+      const master = data.masterAgentName || '未选择';
+      const subCount = data.subAgentIds?.length || 0;
+      return `👑 ${master} + ${subCount} Sub`;
+    }
     default: return '';
   }
 }
@@ -101,13 +161,13 @@ const nodeStyles: Record<string, React.CSSProperties> = {
     minWidth: 180, maxWidth: 240, padding: 0, cursor: 'pointer', transition: 'all 0.2s',
   },
   header: {
-    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
     borderBottom: '1px solid rgba(255,255,255,0.06)',
     borderLeft: '3px solid', borderRadius: '12px 12px 0 0',
   },
   icon: {
-    width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center',
-    justifyContent: 'center', fontSize: 14, flexShrink: 0,
+    width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontSize: 18, flexShrink: 0,
   },
   label: { fontSize: 13, fontWeight: 700 },
   summary: { padding: '8px 14px', fontSize: 11, color: '#94a3b8', lineHeight: '1.4' },
@@ -116,8 +176,7 @@ const nodeStyles: Record<string, React.CSSProperties> = {
     border: '2px solid #0f0f18',
   },
   handleLabels: {
-    display: 'flex', justifyContent: 'space-between', padding: '0 20%',
-    position: 'absolute' as const, bottom: -18, left: 0, right: 0,
+    display: 'flex', justifyContent: 'space-between', padding: '4px 14px',
   },
 };
 
@@ -126,7 +185,8 @@ const nodeStyles: Record<string, React.CSSProperties> = {
 const PropertyPanel: React.FC<{
   node: Node | null;
   onUpdate: (id: string, data: Record<string, any>) => void;
-}> = ({ node, onUpdate }) => {
+  agents: Agent[];
+}> = ({ node, onUpdate, agents }) => {
   if (!node) {
     return (
       <div style={panelStyles.empty}>
@@ -148,33 +208,89 @@ const PropertyPanel: React.FC<{
         <div>
           <div style={{ ...panelStyles.headerType, color: meta.color }}>{meta.label}</div>
           <div style={panelStyles.headerDesc}>{meta.desc}</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', marginTop: 4 }}>{node.id}</div>
         </div>
       </div>
 
-      {/* 节点标签 */}
-      <div style={panelStyles.field}>
-        <label style={panelStyles.label}>节点名称</label>
-        <input style={panelStyles.input} value={data.label || ''} onChange={e => update({ label: e.target.value })} placeholder={meta.label} />
-      </div>
 
-      {/* 触发器：匹配条件设置 */}
+      {/* 触发器：触发类型 + 条件设置 */}
       {node.type === 'trigger' && (
         <>
+          {/* 触发类型选择 */}
           <div style={panelStyles.field}>
-            <label style={panelStyles.label}>触发条件描述</label>
-            <textarea style={panelStyles.textarea} value={data.triggerDesc || ''}
-              onChange={e => update({ triggerDesc: e.target.value })}
-              placeholder="描述什么场景触发此工作流，如：用户要求退款或取消订单"
-              rows={3} />
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>LLM 根据此描述匹配用户意图</div>
+            <label style={panelStyles.label}>触发类型</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(['keyword', 'intent', 'always', 'regex'] as const).map(tt => {
+                const selected = (data.triggerType || 'intent') === tt;
+                const colors: Record<string, string> = { keyword: '#f59e0b', intent: '#a855f7', always: '#10b981', regex: '#3b82f6' };
+                const icons: Record<string, string> = { keyword: '🔑', intent: '🧠', always: '🔄', regex: '📐' };
+                const labels: Record<string, string> = { keyword: '关键词匹配', intent: '意图识别', always: '始终触发', regex: '正则匹配' };
+                const descs: Record<string, string> = {
+                  keyword: '消息包含指定关键词时触发',
+                  intent: 'AI 根据语义理解匹配用户意图',
+                  always: '收到任何消息都触发此工作流',
+                  regex: '消息匹配正则表达式时触发',
+                };
+                return (
+                  <label key={tt} style={{
+                    ...panelStyles.radioLabel,
+                    borderColor: selected ? colors[tt] : 'rgba(255,255,255,0.06)',
+                    background: selected ? `${colors[tt]}10` : 'transparent',
+                  }} onClick={() => update({ triggerType: tt })}>
+                    <div style={{ ...panelStyles.radioDot, border: `2px solid ${selected ? colors[tt] : '#475569'}`, background: selected ? colors[tt] : 'transparent' }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: selected ? colors[tt] : '#e2e8f0' }}>
+                        {icons[tt]} {labels[tt]}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{descs[tt]}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <div style={panelStyles.field}>
-            <label style={panelStyles.label}>关键词（可选，逗号分隔）</label>
-            <input style={panelStyles.input} value={(data.keywords || []).join(', ')}
-              onChange={e => update({ keywords: e.target.value.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean) })}
-              placeholder="退款, 取消订单, 退货" />
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>命中关键词可加速匹配</div>
-          </div>
+
+          {/* 关键词匹配 → 关键词输入 */}
+          {(data.triggerType || 'intent') === 'keyword' && (
+            <div style={panelStyles.field}>
+              <label style={panelStyles.label}>关键词（逗号分隔）</label>
+              <input style={panelStyles.input} value={(data.keywords || []).join(', ')}
+                onChange={e => update({ keywords: e.target.value.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean) })}
+                placeholder="退款, 取消订单, 退货" />
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>消息中包含任一关键词即触发</div>
+            </div>
+          )}
+
+          {/* 意图识别 → 触发条件描述 */}
+          {(data.triggerType || 'intent') === 'intent' && (
+            <div style={panelStyles.field}>
+              <label style={panelStyles.label}>触发条件描述</label>
+              <textarea style={panelStyles.textarea} value={data.triggerDesc || ''}
+                onChange={e => update({ triggerDesc: e.target.value })}
+                placeholder="描述什么场景触发此工作流，如：用户要求退款或取消订单"
+                rows={3} />
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>AI 根据此描述智能匹配用户意图</div>
+            </div>
+          )}
+
+          {/* 正则匹配 → 正则表达式 */}
+          {(data.triggerType || 'intent') === 'regex' && (
+            <div style={panelStyles.field}>
+              <label style={panelStyles.label}>正则表达式</label>
+              <input style={{ ...panelStyles.input, fontFamily: 'monospace' }} value={data.regexPattern || ''}
+                onChange={e => update({ regexPattern: e.target.value })}
+                placeholder="^(退款|取消).*(订单|申请)" />
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>使用 JavaScript 正则语法，不区分大小写</div>
+            </div>
+          )}
+
+          {/* 始终触发 → 提示说明 */}
+          {(data.triggerType || 'intent') === 'always' && (
+            <div style={{ padding: '10px 14px', background: 'rgba(16,185,129,0.08)', borderRadius: 8, border: '1px solid rgba(16,185,129,0.2)' }}>
+              <div style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>⚡ 始终触发模式</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>该工作流将在收到任何消息时自动触发，请谨慎使用。建议配合条件分支节点控制流程。</div>
+            </div>
+          )}
         </>
       )}
 
@@ -295,6 +411,184 @@ const PropertyPanel: React.FC<{
           </div>
         </>
       )}
+
+      {node.type === 'agent' && (
+        <>
+          <div style={panelStyles.field}>
+            <label style={panelStyles.label}>选择 Agent</label>
+            {agents.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无可用 Agent，请先在 Agent 池中创建</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {agents.filter(a => a.enabled).map(agent => {
+                  const isSelected = data.agentId === agent.id;
+                  return (
+                    <label key={agent.id} style={{
+                      ...panelStyles.radioLabel,
+                      borderColor: isSelected ? '#8b5cf6' : 'rgba(255,255,255,0.06)',
+                      background: isSelected ? 'rgba(139,92,246,0.1)' : 'transparent',
+                    }} onClick={() => update({ agentId: agent.id, agentName: agent.name })}>
+                      <div style={{ ...panelStyles.radioDot, border: `2px solid ${isSelected ? '#8b5cf6' : '#475569'}`, background: isSelected ? '#8b5cf6' : 'transparent' }} />
+                      <div style={{ overflow: 'hidden' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#8b5cf6' : '#e2e8f0' }}>
+                          {agent.icon} {agent.name}
+                        </div>
+                        {agent.description && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{agent.description.slice(0, 50)}</div>}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {data.agentId && (() => {
+            const selectedAgent = agents.find(a => a.id === data.agentId);
+            if (!selectedAgent?.prompt) return null;
+            return (
+              <div style={panelStyles.field}>
+                <label style={panelStyles.label}>Prompt 预览</label>
+                <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflow: 'auto', lineHeight: '1.5' }}>
+                  {selectedAgent.prompt.slice(0, 300)}{selectedAgent.prompt.length > 300 ? '...' : ''}
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      )}
+
+      {node.type === 'agent_team' && (
+        <div style={panelStyles.field}>
+          <label style={panelStyles.label}>选择 Agent（多选，并行执行）</label>
+          {agents.filter(a => a.enabled).length === 0 ? (
+            <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无可用 Agent</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {agents.filter(a => a.enabled).map(agent => {
+                const checked = (data.agentIds || []).includes(agent.id);
+                return (
+                  <label key={agent.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderRadius: 8, border: `1.5px solid ${checked ? '#0ea5e9' : 'rgba(255,255,255,0.06)'}`,
+                    background: checked ? 'rgba(14,165,233,0.08)' : 'transparent', cursor: 'pointer',
+                  }} onClick={() => {
+                    const ids = data.agentIds || [];
+                    const names = data.agentNames || [];
+                    if (checked) {
+                      update({ agentIds: ids.filter((id: string) => id !== agent.id), agentNames: names.filter((n: string) => n !== agent.name) });
+                    } else {
+                      update({ agentIds: [...ids, agent.id], agentNames: [...names, agent.name] });
+                    }
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                      border: `2px solid ${checked ? '#0ea5e9' : '#475569'}`,
+                      background: checked ? '#0ea5e9' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 12, fontWeight: 700,
+                    }}>{checked ? '✓' : ''}</div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#7dd3fc' : '#e2e8f0' }}>{agent.icon} {agent.name}</div>
+                      {agent.description && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{agent.description.slice(0, 40)}</div>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: '#475569', marginTop: 6 }}>📋 所有选中的 Agent 将并行执行，通过共享黑板交换数据</div>
+        </div>
+      )}
+
+      {node.type === 'master_sub_agent' && (
+        <>
+          <div style={panelStyles.field}>
+            <label style={panelStyles.label}>👑 Master Agent（单选）</label>
+            {agents.filter(a => a.enabled).length === 0 ? (
+              <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>暂无可用 Agent</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {agents.filter(a => a.enabled).map(agent => {
+                  const isSelected = data.masterAgentId === agent.id;
+                  return (
+                    <label key={agent.id} style={{
+                      ...panelStyles.radioLabel,
+                      borderColor: isSelected ? '#d946ef' : 'rgba(255,255,255,0.06)',
+                      background: isSelected ? 'rgba(217,70,239,0.1)' : 'transparent',
+                    }} onClick={() => update({ masterAgentId: agent.id, masterAgentName: agent.name })}>
+                      <div style={{ ...panelStyles.radioDot, border: `2px solid ${isSelected ? '#d946ef' : '#475569'}`, background: isSelected ? '#d946ef' : 'transparent' }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#d946ef' : '#e2e8f0' }}>{agent.icon} {agent.name}</div>
+                        {agent.description && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{agent.description.slice(0, 40)}</div>}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={panelStyles.field}>
+            <label style={panelStyles.label}>👤 Sub Agents（多选）</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {agents.filter(a => a.enabled && a.id !== data.masterAgentId).map(agent => {
+                const checked = (data.subAgentIds || []).includes(agent.id);
+                return (
+                  <label key={agent.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderRadius: 8, border: `1.5px solid ${checked ? '#a855f7' : 'rgba(255,255,255,0.06)'}`,
+                    background: checked ? 'rgba(168,85,247,0.08)' : 'transparent', cursor: 'pointer',
+                  }} onClick={() => {
+                    const ids = data.subAgentIds || [];
+                    const names = data.subAgentNames || [];
+                    if (checked) {
+                      update({ subAgentIds: ids.filter((id: string) => id !== agent.id), subAgentNames: names.filter((n: string) => n !== agent.name) });
+                    } else {
+                      update({ subAgentIds: [...ids, agent.id], subAgentNames: [...names, agent.name] });
+                    }
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                      border: `2px solid ${checked ? '#a855f7' : '#475569'}`,
+                      background: checked ? '#a855f7' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 12, fontWeight: 700,
+                    }}>{checked ? '✓' : ''}</div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: checked ? '#c4b5fd' : '#e2e8f0' }}>{agent.icon} {agent.name}</div>
+                      {agent.description && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{agent.description.slice(0, 40)}</div>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 6 }}>Master 通过 call_sub_agent 工具自主调用 Sub Agent</div>
+          </div>
+        </>
+      )}
+
+      {/* 最终回复开关 — 所有节点通用 */}
+      {node.type !== 'trigger' && node.type !== 'end' && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+            onClick={() => update({ isFinalReply: !data.isFinalReply })}>
+            <div style={{
+              width: 36, height: 20, borderRadius: 10,
+              background: data.isFinalReply ? '#f59e0b' : 'rgba(255,255,255,0.1)',
+              position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0,
+            }}>
+              <div style={{
+                width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                position: 'absolute' as const, top: 2,
+                left: data.isFinalReply ? 18 : 2, transition: 'left 0.2s',
+              }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: data.isFinalReply ? '#f59e0b' : '#94a3b8' }}>📤 设为最终回复</div>
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>此节点输出将作为工作流最终回复内容</div>
+            </div>
+          </label>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -332,14 +626,26 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
   const [saving, setSaving] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [agentList, setAgentList] = useState<Agent[]>([]);
+  const [direction, setDirection] = useState<FlowDirection>('TB');
 
-  // 自定义节点类型
+  // 方向切换时强制刷新所有节点的 Handle 位置
+  useEffect(() => {
+    setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, _dir: direction } })));
+  }, [direction, setNodes]);
+
+  // 自定义节点类型 — direction 变化时重新注册，确保 Handle 位置刷新
   const nodeTypes: NodeTypes = useMemo(() => {
     const types: Record<string, React.ComponentType<NodeProps>> = {};
     for (const key of Object.keys(NODE_TYPES_META)) {
       types[key] = CustomNode;
     }
     return types;
+  }, [direction]);
+
+  // 加载 Agent 列表
+  useEffect(() => {
+    agentApi.getAgents().then(setAgentList).catch(console.error);
   }, []);
 
   // 加载工作流
@@ -348,7 +654,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
       setWorkflowName('新建工作流');
       setWorkflowMode('independent');
       setTriggerDesc('');
-      setNodes([{ id: 'trigger-1', type: 'trigger', position: { x: 400, y: 60 }, data: { label: '触发器' } }]);
+      setNodes([{ id: generateNodeId('trigger'), type: 'trigger', position: { x: 400, y: 60 }, data: { label: '触发器', triggerType: 'intent' } }]);
       setEdges([]);
       return;
     }
@@ -399,7 +705,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
     const position = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const meta = NODE_TYPES_META[type];
     const newNode: Node = {
-      id: `${type}-${Date.now()}`,
+      id: generateNodeId(type),
       type,
       position,
       data: { label: meta?.label || type },
@@ -457,6 +763,17 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
             onClick={() => setWorkflowMode('replace_input')}
           >🔄 替代输入</button>
         </div>
+        {/* 方向切换 */}
+        <div style={editorStyles.modeSwitch}>
+          <button
+            style={{ ...editorStyles.modeBtn, ...(direction === 'TB' ? editorStyles.modeBtnActive : {}) }}
+            onClick={() => setDirection('TB')}
+          >⬇️ 纵向</button>
+          <button
+            style={{ ...editorStyles.modeBtn, ...(direction === 'LR' ? editorStyles.modeBtnActive : {}) }}
+            onClick={() => setDirection('LR')}
+          >➡️ 横向</button>
+        </div>
         <button style={editorStyles.saveBtn} onClick={handleSave} disabled={saving}>
           {saving ? '保存中...' : '💾 保存'}
         </button>
@@ -481,7 +798,9 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
 
         {/* 中间：React Flow 画布 */}
         <div style={editorStyles.canvas} ref={reactFlowWrapper}>
+          <DirectionContext.Provider value={direction}>
           <ReactFlow
+            key={direction}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
@@ -511,11 +830,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
               style={{ background: '#12121a', borderRadius: 8 }}
             />
           </ReactFlow>
+          </DirectionContext.Provider>
         </div>
 
         {/* 右侧：属性面板 */}
         <div style={editorStyles.rightPanel}>
-          <PropertyPanel node={selectedNode} onUpdate={updateNodeData} />
+          <PropertyPanel node={selectedNode} onUpdate={updateNodeData} agents={agentList} />
         </div>
       </div>
     </div>

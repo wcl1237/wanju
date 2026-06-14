@@ -7,8 +7,9 @@
 export interface FlowNodeData {
   label?: string;
   // trigger
-  triggerType?: string; // 'keyword' | 'llm'
+  triggerType?: 'keyword' | 'intent' | 'always' | 'regex'; // 触发类型
   keywords?: string[];
+  regexPattern?: string; // 正则匹配表达式
   // condition
   expression?: string;
   conditionField?: string;
@@ -34,6 +35,18 @@ export interface FlowNodeData {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  // 通用
+  isFinalReply?: boolean; // 标记此节点输出为工作流最终回复
+  // agent
+  agentId?: string; // Agent 池中的 Agent ID
+  // agent_team
+  agentIds?: string[];       // Agent Teams: 多选 Agent ID
+  agentNames?: string[];     // Agent Teams: 对应名称（用于卡片摘要）
+  // master_sub_agent
+  masterAgentId?: string;    // Master Agent ID
+  masterAgentName?: string;
+  subAgentIds?: string[];    // Sub Agent ID 列表
+  subAgentNames?: string[];  // Sub Agent 名称列表
 }
 
 export interface FlowNode {
@@ -100,4 +113,6 @@ export interface ExecContext {
   lastOutput: string;
   /** 已经通过 content 事件发送的内容 */
   contentYielded: boolean;
+  /** 标记为“最终回复”的节点输出，后面的覆盖前面的 */
+  finalReplyContent?: string;
 }

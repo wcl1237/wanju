@@ -15,6 +15,7 @@ import TicketForm from './features/ticket/components/TicketForm';
 import SkillHub from './features/skill/components/SkillHub';
 import WorkflowPage from './features/workflow/components/WorkflowPage';
 import WorkflowEditor from './features/workflow/components/WorkflowEditor';
+import AgentPool from './features/agent/components/AgentPool';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
@@ -22,6 +23,7 @@ function getActivePage(pathname: string): NavPage {
   if (pathname.startsWith('/knowledge')) return 'knowledge';
   if (pathname.startsWith('/tickets')) return 'tickets';
   if (pathname.startsWith('/workflows')) return 'workflows';
+  if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/skills')) return 'skills';
   return 'chat';
 }
@@ -31,6 +33,7 @@ const pageToRoute: Record<NavPage, string> = {
   knowledge: '/knowledge',
   tickets: '/tickets',
   workflows: '/workflows',
+  agents: '/agents',
   skills: '/skills',
 };
 
@@ -164,6 +167,17 @@ function SkillsPage() {
 }
 
 /**
+ * Agent 池页面
+ */
+function AgentsPage() {
+  return (
+    <div style={styles.pageContent}>
+      <AgentPool />
+    </div>
+  );
+}
+
+/**
  * 工作流编辑器路由页
  */
 function WorkflowEditorRoute() {
@@ -204,6 +218,7 @@ function MainLayout({ user, onLogout }: { user: { id: string; username: string }
           <Route path="/workflows/new" element={<WorkflowEditorRoute />} />
           <Route path="/workflows/:id/edit" element={<WorkflowEditorRoute />} />
           <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/agents" element={<AgentsPage />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
       </div>
