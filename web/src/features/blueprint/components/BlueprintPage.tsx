@@ -20,8 +20,23 @@ const BlueprintPage: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   const handleClick = (bp: AgentBlueprint) => {
-    // 「智能对话」类型 → 打开对话窗口
-    if (bp.runtimeType === 'react' || bp.runtimeType === 'standalone') {
+    // 已配置的智能体 → 打开对话窗口
+    // 未配置的 → 进入编辑器
+    const isConfigured = (() => {
+      switch (bp.runtimeType) {
+        case 'react':
+        case 'standalone':
+          return bp.runtimeType === 'react' || !!(bp.config as any)?.agentId;
+        case 'workflow':
+          return !!(bp.config as any)?.workflowId;
+        case 'harness':
+          return ((bp.config as any)?.chain || []).length > 0;
+        default:
+          return false;
+      }
+    })();
+
+    if (isConfigured) {
       navigate(`/blueprints/${bp.id}/chat`);
     } else {
       navigate(`/blueprints/${bp.id}/edit`);
