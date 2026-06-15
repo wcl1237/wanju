@@ -105,6 +105,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
             setTimeout(() => setToast(null), 2000);
           })}
           onBack={onBack}
+          onAIGenerate={(data) => {
+            store.setNodes(data.nodes || []);
+            store.setEdges(data.edges || []);
+            setToast('✨ AI 工作流已生成');
+            setTimeout(() => setToast(null), 3000);
+          }}
         />
 
         {/* Toast 提示 */}

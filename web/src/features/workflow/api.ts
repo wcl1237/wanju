@@ -34,3 +34,12 @@ export async function updateWorkflow(id: string, dto: UpdateWorkflowDTO): Promis
 export async function deleteWorkflow(id: string): Promise<void> {
   await authFetch(apiUrl(`/workflows/${id}`), { method: 'DELETE' });
 }
+
+export async function generateWorkflow(requirement: string): Promise<{ success: boolean; data?: any; message?: string }> {
+  const res = await authFetch(apiUrl('/workflows/generate'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requirement }),
+  });
+  return res.json();
+}
