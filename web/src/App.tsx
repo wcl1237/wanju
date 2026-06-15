@@ -18,9 +18,11 @@ import WorkflowEditor from './features/workflow/components/WorkflowEditor';
 import AgentPool from './features/agent/components/AgentPool';
 import BlueprintPage from './features/blueprint/components/BlueprintPage';
 import BlueprintEditor from './features/blueprint/components/BlueprintEditor';
+import HomePage from './features/home/components/HomePage';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
+  if (pathname === '/' || pathname === '/home') return 'home';
   if (pathname.startsWith('/blueprints')) return 'blueprints';
   if (pathname.startsWith('/chat')) return 'blueprints';
   if (pathname.startsWith('/knowledge')) return 'knowledge';
@@ -28,10 +30,11 @@ function getActivePage(pathname: string): NavPage {
   if (pathname.startsWith('/workflows')) return 'workflows';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/skills')) return 'skills';
-  return 'blueprints';
+  return 'home';
 }
 
 const pageToRoute: Record<NavPage, string> = {
+  home: '/',
   blueprints: '/blueprints',
   knowledge: '/knowledge',
   tickets: '/tickets',
@@ -232,7 +235,9 @@ function MainLayout({ user, onLogout }: { user: { id: string; username: string }
           <Route path="/workflows/:id/edit" element={<WorkflowEditorRoute />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/agents" element={<AgentsPage />} />
-          <Route path="*" element={<Navigate to="/blueprints" replace />} />
+          <Route path="/" element={<div style={styles.pageContent}><HomePage /></div>} />
+          <Route path="/home" element={<div style={styles.pageContent}><HomePage /></div>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </div>
