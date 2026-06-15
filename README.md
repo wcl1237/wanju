@@ -48,8 +48,10 @@
 - **状态跟踪** — 工单全生命周期管理
 
 ### 🎯 技能中心
-- **技能管理** — 创建和管理 AI 技能（prompt 模板 + 关键词触发）
-- **自动匹配** — 对话中根据用户消息自动激活相关技能
+- **Skill = AI Tool** — 每个 Skill 通过 SkillToolBridge 转为 Function Calling 工具，LLM 自主决定何时调用
+- **参数化** — 支持定义输入参数（如 `order_id`），Prompt 模板中用 `{{order_id}}` 引用
+- **AI 智能创建** — 用自然语言描述需求，AI 自动生成完整 Skill 定义
+- **Pushy 描述** — 参考 Anthropic skill-creator，Tool description 覆盖尽可能多的触发场景
 
 ### 👤 客户管理
 - **自动信息收集** — 对话中自然地收集用户信息
@@ -230,6 +232,7 @@ cd server && npm start
 | **知识库** | `GET/POST/DELETE /api/knowledge` | 知识文档管理 |
 | **工单** | `GET/POST/PUT /api/tickets` | 工单管理 |
 | **技能** | `GET/POST/PUT/DELETE /api/skills` | 技能 CRUD |
+| **技能** | `POST /api/skills/generate` | AI 智能创建技能 |
 | **客户** | `GET /api/customers` | 客户信息 |
 
 完整 API 文档：启动后端后访问 `http://localhost:7001/swagger-ui/index.html`

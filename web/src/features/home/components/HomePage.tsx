@@ -90,7 +90,7 @@ const HomePage: React.FC = () => {
                 </div>
                 <div style={{ ...s.archBox, borderColor: '#10b981' }}>
                   <div style={s.archBoxTitle}>⚡ 技能中心</div>
-                  <div style={s.archBoxText}>关键词/正则触发的预设回复</div>
+                  <div style={s.archBoxText}>Skill → SkillToolBridge → Function Calling Tool</div>
                 </div>
                 <div style={{ ...s.archBox, borderColor: '#3b82f6' }}>
                   <div style={s.archBoxTitle}>📚 知识库</div>
@@ -172,13 +172,14 @@ const sections: Section[] = [
     ],
   },
   {
-    icon: '⚡', title: '技能中心', desc: '配置关键词触发的快捷回复',
+    icon: '⚡', title: '技能中心', desc: '创建可被 AI 自主调用的自定义工具',
     color: '#10b981',
     steps: [
-      { title: '创建技能', text: '点击左侧「技能中心」→「+ 创建技能」，填写名称和描述。' },
-      { title: '设置触发条件', text: '添加关键词列表，当用户消息命中任意关键词时触发该技能。' },
-      { title: '配置回复内容', text: '编辑技能的回复模板，支持纯文本回复。' },
-      { title: '启用/禁用', text: '可随时切换技能的启用状态。禁用后即使匹配关键词也不会触发。' },
+      { title: '进入技能中心', text: '点击左侧「技能中心」，查看已创建的技能卡片。每个技能会作为 Function Calling 工具注册到 AI 对话中。' },
+      { title: 'AI 智能创建', text: '点击「✨ AI 创建」，用自然语言描述你想要的技能，AI 会自动生成名称、描述、参数和 Prompt 模板。', tip: '尽量详细描述使用场景，AI 会生成更准确的 Tool description。' },
+      { title: '手动创建', text: '点击「+ 手动创建」，填写 Tool 描述（告诉 AI 何时使用）、输入参数和 Prompt 模板。', tip: 'Tool 描述要「积极一些」，覆盖尽可能多的触发场景，即使用户没明确说关键词也应触发。' },
+      { title: '定义参数', text: '点击「+ 添加参数」定义输入参数（如 order_id、reason），在 Prompt 模板中用 {{order_id}} 引用。LLM 会自动从对话中提取参数值。' },
+      { title: '启用/禁用', text: '可随时切换技能的启用状态。禁用后 AI 不会看到该工具。' },
     ],
   },
   {
@@ -204,7 +205,7 @@ const sections: Section[] = [
 const faqs = [
   { q: 'ReAct 和工作流运行时有什么区别？', a: 'ReAct 是基于大模型的自主推理+行动循环，适合开放式对话；工作流是确定性的流程图引擎，适合结构化的业务流程（如退款、投诉处理）。' },
   { q: 'Agent 和 Blueprint 是什么关系？', a: 'Agent 是可复用的角色定义（Prompt + 能力），Blueprint 是面向用户的智能体入口。Blueprint 可以绑定 Agent 来继承其配置，也可以独立自定义。' },
-  { q: '技能和工作流可以同时使用吗？', a: '可以。在 ReAct 运行时中，可以同时启用技能和工作流。技能通过关键词匹配触发，工作流通过意图匹配触发。' },
+  { q: '技能和内置 Action 有什么区别？', a: '内置 Action（如知识检索、创建工单）是代码实现的工具；技能是用户可配置的 Prompt-based Tool，通过 SkillToolBridge 转为 Function Calling 工具。两者对 LLM 来说都是工具。' },
   { q: '如何测试我的智能体配置？', a: '在智能体列表页点击卡片上的「💬 对话」按钮，即可进入专属对话测试页面。' },
 ];
 

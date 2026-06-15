@@ -22,9 +22,11 @@ graph TD
     BP -->|runtimeType=harness| HR[Harness Runtime]
 
     ReAct -->|意图匹配| WF[工作流引擎]
-    ReAct -->|技能匹配| Skill[技能系统]
-    ReAct -->|直接对话| LLM[LLM 模型]
     ReAct -->|Function Calling| Actions[ActionRegistry]
+    ReAct -->|Function Calling| SkillTool[Skill Tool]
+    ReAct -->|直接对话| LLM[LLM 模型]
+
+    SkillTool -->|SkillToolBridge| SkillDB[Skill 数据库]
 
     WF -->|Agent 节点| Agent1[单 Agent]
     WF -->|AgentTeam 节点| Agent2[Agent Teams]
@@ -48,14 +50,14 @@ ReAct（Reasoning + Acting）循环是系统的对话核心，位于 [`react-age
   ↓
 ① 工作流匹配 → 命中 → 执行工作流
   ↓ 未命中
-② 技能匹配 → 激活技能 Prompt
+② 加载 Skill → SkillToolBridge → 注册为 Function Calling 工具
   ↓
 ③ ReAct 循环（最多 10 轮）
   ├── Thought  — LLM 思考推理
-  ├── Action   — Function Calling 调用工具
+  ├── Action   — Function Calling（内置 Action + Skill Tool）
   └── Observation — 获取工具结果
   ↓
-④ Final Answer — 最终回复
+④ Final Answer — 流式输出（content_chunk 协议）
 ```
 
 ### 2.2 ReAct 循环流程
@@ -101,7 +103,6 @@ ReAct Agent 的 System Prompt 由以下部分动态拼接：
 | 记忆系统说明 | 硬编码 | 长期记忆使用指引 |
 | 用户信息收集 | 硬编码 | 自然收集用户信息的指引 |
 | 已收集用户信息 | `CustomerService` | 当前对话已收集的字段 |
-| 已激活技能 | `SkillService.matchByText()` | 命中的技能 Prompt |
 
 ---
 
@@ -333,18 +334,23 @@ Agent 执行过程中通过 SSE 实时推送事件到前端：
 
 | 事件类型 | 触发时机 | 关键字段 |
 |----------|----------|----------|
-| `skill_match` | 技能匹配成功 | `skills: [{id, name, icon}]` |
 | `thinking_end` | 一轮思考完成 | `round, content, timeMs` |
-| `tool_start` | 开始调用工具 | `tool, args` |
+| `tool_start` | 开始调用工具（含 Skill Tool） | `tool, args` |
 | `tool_result` | 工具返回结果 | `tool, result, timeMs` |
 | `content` | 完整内容输出（独立气泡） | `content` |
+| `content_stream_start` | 流式气泡开始 | — |
 | `content_chunk` | 流式 token 输出（追加到当前气泡） | `chunk` |
+| `content_stream_end` | 流式气泡结束 + DB 持久化 | `messageId` |
+| `content_saved` | 非流式内容 DB 持久化完成 | `messageId` |
 | `workflow_match` | 工作流匹配成功 | `workflowId, workflowName, workflowIcon` |
 | `workflow_start` | 工作流开始执行 | `workflowId, workflowName, stepCount` |
 | `workflow_step` | 工作流步骤完成 | `stepIndex, nodeId, stepType, result, timeMs` |
 | `workflow_llm` | 工作流 LLM 调用 | `stage, nodeId, purpose` |
 | `workflow_end` | 工作流执行结束 | `totalSteps, totalTimeMs` |
+| `workflow_complete` | 整个 SSE 流结束 | — |
 | `error` | 错误 | `content` |
+
+> **流式输出协议**：Runtime 层只发 `content_chunk`，chat controller 统一管理流生命周期（`content_stream_start` / `content_stream_end` + DB 持久化）。
 
 ---
 
