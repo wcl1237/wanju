@@ -13,12 +13,14 @@ export async function getWorkflow(id: string): Promise<Workflow | null> {
   return json.success ? json.data : null;
 }
 
-export async function createWorkflow(dto: CreateWorkflowDTO): Promise<void> {
-  await authFetch(apiUrl('/workflows'), {
+export async function createWorkflow(dto: CreateWorkflowDTO): Promise<{ id: string }> {
+  const res = await authFetch(apiUrl('/workflows'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dto),
   });
+  const json = await res.json();
+  return json.data;
 }
 
 export async function updateWorkflow(id: string, dto: UpdateWorkflowDTO): Promise<void> {

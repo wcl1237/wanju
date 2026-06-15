@@ -73,7 +73,7 @@ interface WorkflowEditorState {
   loadAgents: () => Promise<void>;
 
   // 保存
-  saveWorkflow: (workflowId: string, onBack: () => void) => Promise<void>;
+  saveWorkflow: (workflowId: string, onSaved?: (newId?: string) => void) => Promise<void>;
 }
 
 export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => ({
@@ -195,7 +195,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => 
     } catch (e) { console.error(e); }
   },
 
-  saveWorkflow: async (workflowId, onBack) => {
+  saveWorkflow: async (workflowId, onSaved) => {
     set({ saving: true });
     try {
       const { nodes, edges, workflowName, workflowMode, triggerDesc } = get();
@@ -204,12 +204,14 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => 
       const finalTriggerDesc = (triggerNode?.data as any)?.triggerDesc || triggerDesc;
 
       if (workflowId === 'new') {
-        await workflowApi.createWorkflow({
+        const created = await workflowApi.createWorkflow({
           name: workflowName || '新工作流',
           triggerDescription: finalTriggerDesc,
           graph,
           mode: workflowMode,
         });
+        // 新建成功，回调传新 ID（用于 URL 更新）
+        onSaved?.(created?.id);
       } else {
         await workflowApi.updateWorkflow(workflowId, {
           name: workflowName,
@@ -217,8 +219,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => 
           graph,
           mode: workflowMode,
         });
+        onSaved?.();
       }
-      onBack();
     } catch (e) { console.error(e); }
     set({ saving: false });
   },

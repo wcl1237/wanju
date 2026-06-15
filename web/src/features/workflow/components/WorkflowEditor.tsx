@@ -5,7 +5,7 @@
  * 子组件分离为 CustomNode / NodePalette / PropertyPanel / WorkflowTopBar。
  */
 
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -33,6 +33,8 @@ interface WorkflowEditorProps {
 
 const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) => {
   const store = useWorkflowEditorStore();
+  const [toast, setToast] = useState<string | null>(null);
+  const [currentId, setCurrentId] = useState(workflowId);
 
   // 构建 nodeTypes（只需一次）
   const nodeTypes: NodeTypes = useMemo(() => {
@@ -97,9 +99,23 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
           direction={store.direction}
           onDirectionChange={store.setDirection}
           saving={store.saving}
-          onSave={() => store.saveWorkflow(workflowId, onBack)}
+          onSave={() => store.saveWorkflow(currentId, (newId) => {
+            if (newId) setCurrentId(newId);
+            setToast('✅ 保存成功');
+            setTimeout(() => setToast(null), 2000);
+          })}
           onBack={onBack}
         />
+
+        {/* Toast 提示 */}
+        {toast && (
+          <div style={{
+            position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)',
+            padding: '8px 24px', background: 'rgba(16,185,129,0.9)', color: '#fff',
+            borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 999,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.2s ease',
+          }}>{toast}</div>
+        )}
 
         <div style={editorStyles.body}>
           <NodePalette />
