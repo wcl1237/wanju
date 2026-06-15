@@ -17,6 +17,7 @@ import { SkillService } from '../../skill/service/skill.service';
 import { SkillToolBridge } from '../../skill/service/skill-tool.bridge';
 import { WorkflowService } from '../../workflow/service/workflow.service';
 import { AgentService } from '../../agent/service/agent.service';
+import { contentChunkEvent } from '../../workflow/model/sse-events';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -175,10 +176,11 @@ export class ReactRuntime implements IAgentRuntime {
       }
     }
 
-    // 超过最大轮次，强制生成回复
+    // 超过最大轮次，强制生成回复（流式）
     try {
+      yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
       for await (const chunk of this.llmClient.chatStream(fullMessages)) {
-        yield `data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`;
+        yield contentChunkEvent(chunk);
       }
     } catch {
       yield `data: ${JSON.stringify({ type: 'error', content: 'AI 服务错误' })}\n\n`;
@@ -237,12 +239,14 @@ export class ReactRuntime implements IAgentRuntime {
     return prompt;
   }
 
+  /** 流式输出 content — 使用 content_chunk 协议 */
   private async *streamContent(content: string): AsyncGenerator<string> {
     const clean = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     if (!clean) return;
+    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
     const chunkSize = 10;
     for (let i = 0; i < clean.length; i += chunkSize) {
-      yield `data: ${JSON.stringify({ type: 'content', content: clean.slice(i, i + chunkSize) })}\n\n`;
+      yield contentChunkEvent(clean.slice(i, i + chunkSize));
       await new Promise(r => setTimeout(r, 30));
     }
   }

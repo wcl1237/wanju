@@ -9,6 +9,7 @@ import { Action, ActionContext } from '../action/action.interface';
 import { CreateTicketAction } from '../action/create-ticket.action';
 import { SearchKnowledgeAction } from '../action/search-knowledge.action';
 import { SaveCustomerInfoAction } from '../action/save-customer-info.action';
+import { contentChunkEvent } from '../../workflow/model/sse-events';
 
 const MAX_REACT_ROUNDS = 10;
 
@@ -298,24 +299,25 @@ export class ReactAgentService {
     yield 'data: [DONE]\n\n';
   }
 
-  /** 将已有内容转为流式输出 */
+  /** 将已有内容转为流式输出（使用 content_chunk 协议） */
   private async *streamFromContent(content: string): AsyncGenerator<string> {
     const cleanContent = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     if (cleanContent) {
+      yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
       const chunkSize = 10;
       for (let i = 0; i < cleanContent.length; i += chunkSize) {
-        const chunk = cleanContent.slice(i, i + chunkSize);
-        yield `data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`;
+        yield contentChunkEvent(cleanContent.slice(i, i + chunkSize));
         await new Promise(resolve => setTimeout(resolve, 30));
       }
     }
   }
 
-  /** 流式调用 AI 生成最终回复 */
+  /** 流式调用 AI 生成最终回复（使用 content_chunk 协议） */
   private async *streamFinalAnswer(messages: AIMessage[]): AsyncGenerator<string> {
     try {
+      yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
       for await (const chunk of this.llmClient.chatStream(messages)) {
-        yield `data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`;
+        yield contentChunkEvent(chunk);
       }
     } catch {
       yield `data: ${JSON.stringify({ type: 'error', content: 'AI 服务错误' })}\n\n`;
