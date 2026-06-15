@@ -1,6 +1,6 @@
 import { INodeExecutor, ExecutorDeps, NodeExecutionResult } from './node-executor.interface';
 import { FlowNode, ExecContext } from '../model/workflow.model';
-import { stepEvent, llmEvent, toolStartEvent, toolResultEvent } from '../model/sse-events';
+import { stepEvent, llmEvent, toolStartEvent, toolResultEvent, contentChunkEvent } from '../model/sse-events';
 import { buildAgentTools } from './shared-utils';
 
 /** 单 Agent 节点 — 调用 Agent 池中的 Agent 执行任务 */
@@ -45,7 +45,20 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
         agentReply = yield* this.executeWithTools(agent, systemPrompt, ctx, deps);
       } else {
         const simplePrompt = `${systemPrompt}\n\n用户消息: ${ctx.userMessage}\n\n请根据以上信息回复用户。`;
-        agentReply = await deps.llmClient.complete(simplePrompt, { temperature: 0.7, maxTokens: 4000 });
+        let fullContent = '';
+        yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
+        try {
+          const stream = deps.llmClient.completeStream(simplePrompt, { temperature: 0.7, maxTokens: 4000 });
+          for await (const chunk of stream) {
+            if (deps.abortSignal?.aborted) break;
+            fullContent += chunk;
+            yield contentChunkEvent(chunk);
+          }
+        } catch {
+          if (!fullContent) fullContent = 'Agent 执行完成。';
+        }
+        yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
+        agentReply = fullContent;
       }
 
       yield llmEvent({ stage: 'end', nodeId: node.id, purpose: `Agent: ${agent.name}`, timeMs: Date.now() - llmStart });

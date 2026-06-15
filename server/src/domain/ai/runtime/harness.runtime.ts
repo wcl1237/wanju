@@ -20,6 +20,7 @@ import { WorkflowService } from '../../workflow/service/workflow.service';
 import { AgentService } from '../../agent/service/agent.service';
 import { ActionContext } from '../action/action.interface';
 import { ActionRegistry } from '../action/action-registry';
+import { contentChunkEvent } from '../../workflow/model/sse-events';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -101,13 +102,26 @@ export class HarnessRuntime implements IAgentRuntime {
     }
   }
 
-  /** LLM 步骤 */
+  /** LLM 步骤 — 流式输出 */
   private async *executeLlmStep(config: LlmStepConfig, ctx: Record<string, any>): AsyncGenerator<string> {
     const prompt = this.templateReplace(config.prompt, ctx);
-    const result = await this.llmClient.complete(prompt, { temperature: config.temperature || 0.7 });
-    ctx[config.outputKey] = result;
-    ctx['__finalOutput'] = result;
-    yield `data: ${JSON.stringify({ type: 'harness_llm', outputKey: config.outputKey, preview: result.slice(0, 200) })}\n\n`;
+    let fullContent = '';
+
+    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
+    try {
+      const stream = this.llmClient.completeStream(prompt, { temperature: config.temperature || 0.7, maxTokens: 4000 });
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        yield contentChunkEvent(chunk);
+      }
+    } catch {
+      if (!fullContent) fullContent = '处理完成。';
+    }
+
+    ctx[config.outputKey] = fullContent;
+    ctx['__finalOutput'] = fullContent;
+    yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
+    yield `data: ${JSON.stringify({ type: 'harness_llm', outputKey: config.outputKey, preview: fullContent.slice(0, 200) })}\n\n`;
   }
 
   /** Action 步骤 */
@@ -158,7 +172,7 @@ export class HarnessRuntime implements IAgentRuntime {
     ctx[config.outputKey] = output;
   }
 
-  /** Agent 步骤 */
+  /** Agent 步骤 — 流式输出 */
   private async *executeAgentStep(config: AgentStepConfig, ctx: Record<string, any>): AsyncGenerator<string> {
     const agent = await this.agentService.getById(config.agentId);
     if (!agent) {
@@ -167,10 +181,24 @@ export class HarnessRuntime implements IAgentRuntime {
     }
 
     const task = this.templateReplace(config.taskPrompt, ctx);
-    const result = await this.llmClient.complete(`${agent.prompt}\n\n任务: ${task}`, { temperature: 0.7, maxTokens: 4000 });
-    ctx[config.outputKey] = result;
-    ctx['__finalOutput'] = result;
-    yield `data: ${JSON.stringify({ type: 'harness_agent', agentName: agent.name, preview: result.slice(0, 200) })}\n\n`;
+    const prompt = `${agent.prompt}\n\n任务: ${task}`;
+    let fullContent = '';
+
+    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
+    try {
+      const stream = this.llmClient.completeStream(prompt, { temperature: 0.7, maxTokens: 4000 });
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        yield contentChunkEvent(chunk);
+      }
+    } catch {
+      if (!fullContent) fullContent = 'Agent 执行完成。';
+    }
+
+    ctx[config.outputKey] = fullContent;
+    ctx['__finalOutput'] = fullContent;
+    yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
+    yield `data: ${JSON.stringify({ type: 'harness_agent', agentName: agent.name, preview: fullContent.slice(0, 200) })}\n\n`;
   }
 
   /** Condition 步骤 — 条件分支 */
