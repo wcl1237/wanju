@@ -136,7 +136,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ workflowId, onBack }) =
                 onPaneClick={() => store.selectNode(null)}
                 onInit={(instance) => { reactFlowInstance.current = instance; }}
                 defaultEdgeOptions={defaultEdgeOptions}
-                fitView
+                
                 style={{ background: '#0a0a0f' }}
               >
                 <Background color="#1e293b40" gap={20} />

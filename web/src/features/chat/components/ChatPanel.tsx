@@ -146,7 +146,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSend, conv
             </div>
             <h2 style={styles.welcomeTitle}>有什么可以帮您？</h2>
             <p style={styles.welcomeSubtitle}>
-              我是您的AI智能客服助手，随时为您提供帮助
+              我是您的AI智能助手，随时为您提供帮助
             </p>
             <div style={styles.suggestionsGrid}>
               {SUGGESTIONS.map((s, i) => (

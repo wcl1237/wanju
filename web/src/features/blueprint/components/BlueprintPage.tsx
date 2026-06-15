@@ -174,7 +174,7 @@ const CreateBlueprintDialog: React.FC<{ onClose: () => void; onCreated: () => vo
 
         <div style={s.field}>
           <label style={s.label}>名称</label>
-          <input style={s.input} value={name} onChange={e => setName(e.target.value)} placeholder="如：智能客服、退款助手" />
+          <input style={s.input} value={name} onChange={e => setName(e.target.value)} placeholder="如：玩聚客服、退款助手" />
         </div>
 
         <div style={s.field}>
@@ -193,19 +193,23 @@ const CreateBlueprintDialog: React.FC<{ onClose: () => void; onCreated: () => vo
             {(Object.keys(RUNTIME_TYPE_META) as RuntimeType[]).map(rt => {
               const meta = RUNTIME_TYPE_META[rt];
               const selected = runtimeType === rt;
+              const disabled = rt === 'harness';
               return (
                 <button
                   key={rt}
+                  disabled={disabled}
                   style={{
                     ...s.runtimeOption,
                     borderColor: selected ? meta.color : 'rgba(255,255,255,0.08)',
                     background: selected ? `${meta.color}10` : 'transparent',
+                    opacity: disabled ? 0.4 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
                   }}
-                  onClick={() => setRuntimeType(rt)}
+                  onClick={() => !disabled && setRuntimeType(rt)}
                 >
                   <span style={{ fontSize: 20 }}>{meta.icon}</span>
                   <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: selected ? meta.color : '#e2e8f0' }}>{meta.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: selected ? meta.color : '#e2e8f0' }}>{meta.label}{disabled ? '（待开放）' : ''}</div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{meta.desc}</div>
                   </div>
                   {selected && <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color }} />}

@@ -76,7 +76,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       <div style={styles.card}>
         <div style={styles.logoSection}>
           <div style={styles.logoIcon}>🤖</div>
-          <h1 style={styles.logoTitle}>智能客服系统</h1>
+          <h1 style={styles.logoTitle}>玩聚</h1>
           <p style={styles.logoSubtitle}>Smart Customer Service</p>
         </div>
 

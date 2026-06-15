@@ -164,10 +164,10 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>((set, get) => 
         workflowMode: 'independent',
         triggerDesc: '',
         nodes: [{
-          id: generateNodeId('trigger'),
-          type: 'trigger',
+          id: generateNodeId('start'),
+          type: 'start',
           position: { x: 400, y: 60 },
-          data: { label: '触发器', triggerType: 'intent' },
+          data: { label: '开始' },
         }],
         edges: [],
       });

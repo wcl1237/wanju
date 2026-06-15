@@ -28,7 +28,7 @@ const NavSidebar: React.FC<NavSidebarProps> = ({ activePage, onNavigate, usernam
       {/* Logo */}
       <div style={styles.logoArea}>
         <div style={styles.logoIcon}>🤖</div>
-        <span style={styles.logoText}>智能客服</span>
+        <span style={styles.logoText}>玩聚</span>
       </div>
 
       {/* Nav Items */}
