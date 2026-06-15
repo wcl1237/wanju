@@ -15,6 +15,7 @@ export function getNodeSummary(type: string, data: Record<string, any>): string 
       if (tt === 'intent' && data.triggerDesc) return `${label}：${data.triggerDesc.slice(0, 20)}`;
       return label;
     }
+    case 'start': return '工作流入口，接收用户消息';
     case 'end': return '流程终止节点';
     case 'extract': return data.params?.length ? `提取: ${data.params.join(', ')}` : '';
     case 'condition': return data.conditionField ? `${data.conditionField} ${data.conditionOp || '?'} ${data.conditionValue || ''}` : '';
