@@ -22,7 +22,7 @@ import BlueprintEditor from './features/blueprint/components/BlueprintEditor';
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
   if (pathname.startsWith('/blueprints')) return 'blueprints';
-  if (pathname.startsWith('/chat')) return 'chat';
+  if (pathname.startsWith('/chat')) return 'blueprints';
   if (pathname.startsWith('/knowledge')) return 'knowledge';
   if (pathname.startsWith('/tickets')) return 'tickets';
   if (pathname.startsWith('/workflows')) return 'workflows';
@@ -33,7 +33,6 @@ function getActivePage(pathname: string): NavPage {
 
 const pageToRoute: Record<NavPage, string> = {
   blueprints: '/blueprints',
-  chat: '/chat',
   knowledge: '/knowledge',
   tickets: '/tickets',
   workflows: '/workflows',
