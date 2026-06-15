@@ -50,7 +50,7 @@ export class ExtractExecutor implements INodeExecutor {
 请以 JSON 格式输出: {"参数名": "值"}。无法提取的设为空字符串。只输出 JSON。`;
 
     try {
-      const content = await deps.llmClient.complete(prompt, { temperature: 0.1, maxTokens: 300 });
+      const content = await deps.llmClient.complete(prompt, { temperature: 0.1, maxTokens: 2000 });
       const m = content.match(/\{[\s\S]*\}/);
       return m ? JSON.parse(m[0]) : {};
     } catch { return {}; }

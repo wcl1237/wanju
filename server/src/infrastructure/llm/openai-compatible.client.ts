@@ -168,7 +168,7 @@ export class OpenAICompatibleClient implements ILLMClient {
       [{ role: 'user', content: prompt }],
       {
         temperature: options?.temperature ?? 0.1,
-        maxTokens: options?.maxTokens ?? 300,
+        maxTokens: options?.maxTokens ?? 4000,
       }
     );
 

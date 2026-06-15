@@ -119,7 +119,7 @@ ${workflowList}
 不要输出其他内容。`;
 
     try {
-      const content = await this.llmClient.complete(prompt, { temperature: 0.1, maxTokens: 200 });
+      const content = await this.llmClient.complete(prompt, { temperature: 0.1, maxTokens: 1000 });
       console.log(`[Workflow] LLM 意图匹配结果: "${content}"`);
       if (content.toLowerCase() === 'none') return null;
       const matchedWorkflow = intentWorkflows.find(w => content.includes(w.id));

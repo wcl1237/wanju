@@ -66,7 +66,7 @@ export class MasterSubAgentExecutor implements INodeExecutor {
 
     for (let r = 0; r < MAX_ROUNDS; r++) {
       const resp = await deps.llmClient.chat(masterMsgs, {
-        tools: masterTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 1000,
+        tools: masterTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 4000,
       });
 
       if (!resp.toolCalls || resp.toolCalls.length === 0) {
@@ -100,7 +100,7 @@ export class MasterSubAgentExecutor implements INodeExecutor {
     }
 
     if (!masterReply) {
-      const lastMaster = await deps.llmClient.chat(masterMsgs, { temperature: 0.7, maxTokens: 1000 });
+      const lastMaster = await deps.llmClient.chat(masterMsgs, { temperature: 0.7, maxTokens: 4000 });
       masterReply = lastMaster.content || '编排完成。';
     }
 
@@ -151,7 +151,7 @@ export class MasterSubAgentExecutor implements INodeExecutor {
       const subResp = await deps.llmClient.chat(subMsgs, {
         tools: subTools.length > 0 ? subTools : undefined,
         toolChoice: subTools.length > 0 ? 'auto' : undefined,
-        temperature: 0.7, maxTokens: 800,
+        temperature: 0.7, maxTokens: 4000,
       });
 
       if (!subResp.toolCalls || subResp.toolCalls.length === 0) {
@@ -171,7 +171,7 @@ export class MasterSubAgentExecutor implements INodeExecutor {
     }
 
     if (!subReply) {
-      const lastSub = await deps.llmClient.chat(subMsgs, { temperature: 0.7, maxTokens: 800 });
+      const lastSub = await deps.llmClient.chat(subMsgs, { temperature: 0.7, maxTokens: 4000 });
       subReply = lastSub.content || '';
     }
 

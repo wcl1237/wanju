@@ -127,6 +127,9 @@ export class GraphEngineService {
 
     console.log(`[Workflow] 📌 遍历节点: ${node.type} (${nodeId}) [step ${execCtx._stepCount}]`);
 
+    // 每个节点独立判断是否透传输出
+    execCtx.contentYielded = false;
+
     // 查找执行器
     const executor = this.registry.get(node.type);
     if (!executor) {
@@ -190,9 +193,11 @@ export class GraphEngineService {
       execCtx.finalReplyContent = execCtx.lastOutput;
     }
 
-    // 透传 AI 输出：将节点 AI 执行结果直接发送到对话窗口
-    if (node.data.passthroughAIOutput && execCtx.lastOutput && !execCtx.contentYielded) {
-      console.log(`[Workflow] 🔄 透传 AI 输出: ${nodeId}`);
+    // 默认透传节点输出到对话窗口（passthroughAIOutput 默认 true）
+    // 只有当 contentYielded 已为 true（节点自己已发 content）时跳过
+    const shouldPassthrough = node.data.passthroughAIOutput !== false;
+    if (shouldPassthrough && execCtx.lastOutput && !execCtx.contentYielded) {
+      console.log(`[Workflow] 🔄 透传节点输出: ${nodeId}`);
       yield contentEvent(execCtx.lastOutput);
       execCtx.contentYielded = true;
     }
@@ -215,7 +220,7 @@ export class GraphEngineService {
           ? `${customPrompt}\n\n节点执行结果:\n${typeof nodeResult === 'string' ? nodeResult : JSON.stringify(nodeResult, null, 2)}\n\n用户原始消息: ${execCtx.userMessage}\n\n请直接输出面向用户的回复，不要解释或添加前缀:`
           : `你是客服助手。当前工作流的「${node.data.label || node.type}」节点已执行完成。\n\n节点执行结果:\n${typeof nodeResult === 'string' ? nodeResult : JSON.stringify(nodeResult, null, 2)}\n\n用户原始消息: ${execCtx.userMessage}\n\n请根据上述信息，用简洁友好的语言向用户反馈当前进展。直接输出回复内容:`;
 
-        const aiReply = await deps.llmClient.complete(aiPrompt, { temperature: 0.5, maxTokens: 500 });
+        const aiReply = await deps.llmClient.complete(aiPrompt, { temperature: 0.5, maxTokens: 4000 });
         if (aiReply) {
           yield contentEvent(aiReply);
           execCtx.lastOutput = aiReply;

@@ -45,7 +45,7 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
         agentReply = yield* this.executeWithTools(agent, systemPrompt, ctx, deps);
       } else {
         const simplePrompt = `${systemPrompt}\n\n用户消息: ${ctx.userMessage}\n\n请根据以上信息回复用户。`;
-        agentReply = await deps.llmClient.complete(simplePrompt, { temperature: 0.7, maxTokens: 1000 });
+        agentReply = await deps.llmClient.complete(simplePrompt, { temperature: 0.7, maxTokens: 4000 });
       }
 
       yield llmEvent({ stage: 'end', nodeId: node.id, purpose: `Agent: ${agent.name}`, timeMs: Date.now() - llmStart });
@@ -89,7 +89,7 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
         tools: agentTools.length > 0 ? agentTools : undefined,
         toolChoice: agentTools.length > 0 ? 'auto' : undefined,
         temperature: 0.7,
-        maxTokens: 1000,
+        maxTokens: 4000,
       });
 
       if (!resp.toolCalls || resp.toolCalls.length === 0) {
@@ -125,7 +125,7 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
     }
 
     if (!reply) {
-      const lastResp = await deps.llmClient.chat(messages, { temperature: 0.7, maxTokens: 1000 });
+      const lastResp = await deps.llmClient.chat(messages, { temperature: 0.7, maxTokens: 4000 });
       reply = lastResp.content || '工作流 Agent 执行完成。';
     }
 

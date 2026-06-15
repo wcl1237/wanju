@@ -55,7 +55,7 @@ ${resultsSummary}
 请生成面向用户的友好回复。不要暴露内部实现。`;
 
     try {
-      const content = await deps.llmClient.complete(prompt, { temperature: 0.7, maxTokens: 800 });
+      const content = await deps.llmClient.complete(prompt, { temperature: 0.7, maxTokens: 4000 });
       return content || '工作流执行完成。';
     } catch { return '工作流已执行完成。'; }
   }

@@ -104,18 +104,18 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
             <label style={panelStyles.label}>生成提示词</label>
             <textarea style={panelStyles.textarea} value={data.prompt || ''} onChange={e => update({ prompt: e.target.value })} placeholder="根据工作流执行结果，生成友好的用户回复" rows={4} />
           </div>
-          <PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} />
+          <PassthroughToggle enabled={data.passthroughAIOutput !== false} onToggle={() => update({ passthroughAIOutput: data.passthroughAIOutput === false ? true : false })} />
         </>
       )}
 
       {/* Agent 透传开关 */}
-      {node.type === 'agent' && <><AgentFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
+      {node.type === 'agent' && <><AgentFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={data.passthroughAIOutput !== false} onToggle={() => update({ passthroughAIOutput: data.passthroughAIOutput === false ? true : false })} /></>}
 
       {/* Agent Team 透传开关 */}
-      {node.type === 'agent_team' && <><AgentTeamFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
+      {node.type === 'agent_team' && <><AgentTeamFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={data.passthroughAIOutput !== false} onToggle={() => update({ passthroughAIOutput: data.passthroughAIOutput === false ? true : false })} /></>}
 
       {/* Master-Sub 透传开关 */}
-      {node.type === 'master_sub_agent' && <><MasterSubFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
+      {node.type === 'master_sub_agent' && <><MasterSubFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={data.passthroughAIOutput !== false} onToggle={() => update({ passthroughAIOutput: data.passthroughAIOutput === false ? true : false })} /></>}
 
       {/* 知识检索 */}
       {node.type === 'knowledge' && (
@@ -523,8 +523,8 @@ const PassthroughToggle: React.FC<{ enabled: boolean; onToggle: () => void }> = 
         }} />
       </div>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#a855f7' : '#94a3b8' }}>🔄 透传 AI 输出</div>
-        <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>将此节点的 AI 执行结果直接发送到对话窗口</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#a855f7' : '#94a3b8' }}>🔄 透传 AI 输出{enabled ? '' : '（已关闭）'}</div>
+        <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>默认开启 — 将节点 AI 执行结果发送到对话窗口</div>
       </div>
     </label>
   </div>

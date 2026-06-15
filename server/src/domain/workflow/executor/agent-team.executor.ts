@@ -108,7 +108,7 @@ export class AgentTeamExecutor implements INodeExecutor {
     let reply = '';
     for (let r = 0; r < 5; r++) {
       const resp = await deps.llmClient.chat(msgs, {
-        tools: agentTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 800,
+        tools: agentTools, toolChoice: 'auto', temperature: 0.7, maxTokens: 4000,
       });
 
       if (!resp.toolCalls || resp.toolCalls.length === 0) {
@@ -143,7 +143,7 @@ export class AgentTeamExecutor implements INodeExecutor {
     }
 
     if (!reply) {
-      const last = await deps.llmClient.chat(msgs, { temperature: 0.7, maxTokens: 800 });
+      const last = await deps.llmClient.chat(msgs, { temperature: 0.7, maxTokens: 4000 });
       reply = last.content || '';
     }
 

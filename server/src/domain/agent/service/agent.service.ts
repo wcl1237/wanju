@@ -51,7 +51,7 @@ Agent 描述: ${description}
 请生成 System Prompt:`;
 
     try {
-      const content = await this.llmClient.complete(prompt, { temperature: 0.7, maxTokens: 1000 });
+      const content = await this.llmClient.complete(prompt, { temperature: 0.7, maxTokens: 4000 });
       return content || '';
     } catch (e: any) {
       console.error('[Agent] AI 生成 Prompt 失败:', e.message);

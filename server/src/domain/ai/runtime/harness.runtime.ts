@@ -167,7 +167,7 @@ export class HarnessRuntime implements IAgentRuntime {
     }
 
     const task = this.templateReplace(config.taskPrompt, ctx);
-    const result = await this.llmClient.complete(`${agent.prompt}\n\n任务: ${task}`, { temperature: 0.7, maxTokens: 1000 });
+    const result = await this.llmClient.complete(`${agent.prompt}\n\n任务: ${task}`, { temperature: 0.7, maxTokens: 4000 });
     ctx[config.outputKey] = result;
     ctx['__finalOutput'] = result;
     yield `data: ${JSON.stringify({ type: 'harness_agent', agentName: agent.name, preview: result.slice(0, 200) })}\n\n`;
