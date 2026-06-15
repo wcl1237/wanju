@@ -39,7 +39,9 @@ export interface FlowNodeData {
   body?: string;
   // 通用
   isFinalReply?: boolean; // 标记此节点输出为工作流最终回复
-  responseText?: string;  // 节点执行后向对话窗口发送的反馈消息
+  responseText?: string;  // 节点执行后向对话窗口发送的固定反馈消息
+  autoAIResponse?: boolean;  // 节点执行后让 AI 根据结果自动生成反馈
+  aiResponsePrompt?: string; // AI 反馈的提示词（可选，留空使用默认）
   // agent
   agentId?: string; // Agent 池中的 Agent ID
   // agent_team

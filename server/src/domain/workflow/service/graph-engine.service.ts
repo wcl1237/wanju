@@ -190,12 +190,33 @@ export class GraphEngineService {
       execCtx.finalReplyContent = execCtx.lastOutput;
     }
 
-    // 节点可配置 responseText — 执行后向对话窗口发送反馈信息
-    if (node.data.responseText) {
-      const respText = node.data.responseText.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => execCtx.params[key] || `{{${key}}}`);
+    // 节点可配置 responseText — 执行后向对话窗口发送固定反馈
+    const trimmedResponse = (node.data.responseText || '').trim();
+    if (trimmedResponse) {
+      const respText = trimmedResponse.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => execCtx.params[key] || `{{${key}}}`);
       yield contentEvent(respText);
       execCtx.lastOutput = respText;
       execCtx.contentYielded = true;
+    }
+
+    // 节点可配置 autoAIResponse — 执行后让 AI 根据结果自动生成反馈
+    if (node.data.autoAIResponse && !trimmedResponse) {
+      try {
+        const nodeResult = execCtx.results.get(nodeId) || execCtx.lastOutput || '';
+        const customPrompt = node.data.aiResponsePrompt || '';
+        const aiPrompt = customPrompt
+          ? `${customPrompt}\n\n节点执行结果:\n${typeof nodeResult === 'string' ? nodeResult : JSON.stringify(nodeResult, null, 2)}\n\n用户原始消息: ${execCtx.userMessage}\n\n请直接输出面向用户的回复，不要解释或添加前缀:`
+          : `你是客服助手。当前工作流的「${node.data.label || node.type}」节点已执行完成。\n\n节点执行结果:\n${typeof nodeResult === 'string' ? nodeResult : JSON.stringify(nodeResult, null, 2)}\n\n用户原始消息: ${execCtx.userMessage}\n\n请根据上述信息，用简洁友好的语言向用户反馈当前进展。直接输出回复内容:`;
+
+        const aiReply = await deps.llmClient.complete(aiPrompt, { temperature: 0.5, maxTokens: 500 });
+        if (aiReply) {
+          yield contentEvent(aiReply);
+          execCtx.lastOutput = aiReply;
+          execCtx.contentYielded = true;
+        }
+      } catch (e: any) {
+        console.error(`[Workflow] AI 反馈生成失败 (${nodeId}):`, e.message);
+      }
     }
 
     // 获取下游节点并递归

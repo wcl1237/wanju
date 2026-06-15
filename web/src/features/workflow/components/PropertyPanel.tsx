@@ -142,17 +142,62 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
       {/* 节点执行后的对话反馈 */}
       {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && node.type !== 'reply' && node.type !== 'llm_reply' && (
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={panelStyles.field}>
-            <label style={panelStyles.label}>💬 对话反馈（可选）</label>
-            <textarea
-              style={panelStyles.textarea}
-              value={data.responseText || ''}
-              onChange={e => update({ responseText: e.target.value })}
-              placeholder="执行此节点后向用户发送的消息。支持 {{参数名}} 变量。留空则不发送。"
-              rows={2}
-            />
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>执行完此节点后自动向对话窗口发送此消息</div>
+          <label style={{ ...panelStyles.label, marginBottom: 10 }}>💬 对话反馈（可选）</label>
+
+          {/* 模式选择 */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {([
+              { key: 'none', label: '不反馈', icon: '🚫' },
+              { key: 'text', label: '固定文本', icon: '📝' },
+              { key: 'ai', label: 'AI 生成', icon: '✨' },
+            ] as const).map(opt => {
+              const mode = data.autoAIResponse ? 'ai' : data.responseText ? 'text' : 'none';
+              const selected = mode === opt.key;
+              return (
+                <button key={opt.key} style={{
+                  flex: 1, padding: '6px 4px', fontSize: 11, fontWeight: 600,
+                  border: `1.5px solid ${selected ? '#a855f7' : 'rgba(255,255,255,0.06)'}`,
+                  background: selected ? 'rgba(168,85,247,0.1)' : 'transparent',
+                  color: selected ? '#a855f7' : '#94a3b8',
+                  borderRadius: 6, cursor: 'pointer',
+                }} onClick={() => {
+                  if (opt.key === 'none') update({ responseText: '', autoAIResponse: false, aiResponsePrompt: '' });
+                  else if (opt.key === 'text') update({ responseText: data.responseText || ' ', autoAIResponse: false, aiResponsePrompt: '' });
+                  else update({ responseText: '', autoAIResponse: true });
+                }}>
+                  {opt.icon} {opt.label}
+                </button>
+              );
+            })}
           </div>
+
+          {/* 固定文本模式 */}
+          {!data.autoAIResponse && !!data.responseText && (
+            <div style={panelStyles.field}>
+              <textarea
+                style={panelStyles.textarea}
+                value={data.responseText?.trim() || ''}
+                onChange={e => update({ responseText: e.target.value || ' ' })}
+                placeholder="执行此节点后向用户发送的消息。支持 {{参数名}} 变量。"
+                rows={2}
+              />
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>执行完此节点后自动向对话窗口发送此消息</div>
+            </div>
+          )}
+
+          {/* AI 生成模式 */}
+          {data.autoAIResponse && (
+            <div style={panelStyles.field}>
+              <textarea
+                style={panelStyles.textarea}
+                value={data.aiResponsePrompt || ''}
+                onChange={e => update({ aiResponsePrompt: e.target.value })}
+                placeholder="可选：自定义 AI 反馈的提示词。留空则使用默认提示词，AI 会根据节点执行结果自动生成面向用户的反馈。"
+                rows={3}
+              />
+              <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 4 }}>✨ AI 将根据节点执行结果自动生成反馈消息发送给用户</div>
+            </div>
+          )}
         </div>
       )}
     </div>
