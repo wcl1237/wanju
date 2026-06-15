@@ -30,3 +30,15 @@ export async function updateSkill(id: string, dto: UpdateSkillDTO): Promise<Skil
 export async function deleteSkill(id: string): Promise<void> {
   await authFetch(apiUrl(`/skills/${id}`), { method: 'DELETE' });
 }
+
+/** AI 智能创建 — 根据自然语言描述生成完整 Skill 定义 */
+export async function generateSkill(description: string): Promise<Partial<Skill>> {
+  const res = await authFetch(apiUrl('/skills/generate'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'AI 生成失败');
+  return data.data;
+}

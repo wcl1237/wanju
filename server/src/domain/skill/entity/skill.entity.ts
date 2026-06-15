@@ -12,10 +12,16 @@ export class SkillEntity {
   description: string;
 
   @Column('text', { default: '' })
-  keywords: string; // 逗号分隔的触发关键词
+  tags: string; // 逗号分隔的标签
 
   @Column('text', { default: '' })
-  prompt: string; // Prompt 模板
+  prompt: string; // Prompt 模板，支持 {{param}} 占位符
+
+  @Column('text', { default: '[]' })
+  parameters: string; // JSON 字符串存储 SkillParameter[]
+
+  @Column('text', { name: 'output_template', default: '' })
+  outputTemplate: string;
 
   @Column('text', { default: '⚡' })
   icon: string;

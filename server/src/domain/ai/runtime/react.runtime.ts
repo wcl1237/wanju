@@ -14,6 +14,7 @@ import { Action, ActionContext } from '../action/action.interface';
 import { ActionRegistry } from '../action/action-registry';
 import { CustomerService } from '../../customer/service/customer.service';
 import { SkillService } from '../../skill/service/skill.service';
+import { SkillToolBridge } from '../../skill/service/skill-tool.bridge';
 import { WorkflowService } from '../../workflow/service/workflow.service';
 import { AgentService } from '../../agent/service/agent.service';
 
@@ -37,6 +38,9 @@ export class ReactRuntime implements IAgentRuntime {
 
   @Inject()
   actionRegistry: ActionRegistry;
+
+  @Inject()
+  skillToolBridge: SkillToolBridge;
 
   async *execute(
     messages: AIMessage[],
@@ -66,8 +70,18 @@ export class ReactRuntime implements IAgentRuntime {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     const userText = lastUserMsg?.content || '';
 
-    // 过滤可用 Actions
+    // 过滤可用 Actions（内置）
     const enabledActions = this.actionRegistry.getEnabled(config.actions);
+
+    // ② 加载 Skill Tool（用户自定义工具）
+    if (config.skillIds && config.skillIds.length > 0) {
+      const skills = await this.skillService.getByIds(config.skillIds);
+      if (skills.length > 0) {
+        const skillActions = this.skillToolBridge.toActions(skills, this.llmClient);
+        for (const [k, v] of skillActions) enabledActions.set(k, v);
+        console.log(`[ReactRuntime] 🔧 加载 ${skills.length} 个 Skill Tool: ${skills.map(s => s.name).join(', ')}`);
+      }
+    }
 
     // ① 工作流匹配（仅当配置了可触发工作流时才启用）
     if (config.workflowIds && config.workflowIds.length > 0) {
@@ -114,20 +128,7 @@ export class ReactRuntime implements IAgentRuntime {
       }
     }
 
-    // ② 技能匹配（仅当配置了可触发技能时才启用）
-    let matchedSkills: { id: string; name: string; prompt: string; icon: string }[] = [];
-    if (config.skillIds && config.skillIds.length > 0) {
-      const allMatched = await this.skillService.matchByText(userText);
-      matchedSkills = allMatched.filter(s => config.skillIds.includes(s.id));
-    }
-    const systemPrompt = await this.buildSystemPrompt(config, context.conversationId, matchedSkills);
-
-    if (matchedSkills.length > 0) {
-      yield `data: ${JSON.stringify({
-        type: 'skill_match',
-        skills: matchedSkills.map(s => ({ id: s.id, name: s.name, icon: s.icon })),
-      })}\n\n`;
-    }
+    const systemPrompt = await this.buildSystemPrompt(config, context.conversationId);
 
     // ③ ReAct 循环
     const fullMessages: AIMessage[] = [{ role: 'system', content: systemPrompt }, ...messages];
@@ -199,7 +200,6 @@ export class ReactRuntime implements IAgentRuntime {
   private async buildSystemPrompt(
     config: ReactRuntimeConfig,
     conversationId?: string,
-    matchedSkills: { name: string; prompt: string; icon: string }[] = [],
   ): Promise<string> {
     let prompt = config.systemPrompt;
 
@@ -231,13 +231,6 @@ export class ReactRuntime implements IAgentRuntime {
             prompt += `\n\n## 当前对话已收集的用户信息\n${fields.join('\n')}`;
           }
         }
-      }
-    }
-
-    if (matchedSkills.length > 0) {
-      prompt += `\n\n## 已激活技能`;
-      for (const skill of matchedSkills) {
-        prompt += `\n\n### ${skill.icon} ${skill.name}\n${skill.prompt}`;
       }
     }
 

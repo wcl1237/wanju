@@ -1,6 +1,7 @@
 import { Provide, Inject, Scope, ScopeEnum, Config } from '@midwayjs/core';
 import { CustomerService } from '../../customer/service/customer.service';
 import { SkillService } from '../../skill/service/skill.service';
+import { SkillToolBridge } from '../../skill/service/skill-tool.bridge';
 import { WorkflowService } from '../../workflow/service/workflow.service';
 import { AIConfig, AIMessage, AITool } from '../model/ai.model';
 import { ILLMClient } from '../port/llm.port';
@@ -24,6 +25,9 @@ export class ReactAgentService {
 
   @Inject()
   skillService: SkillService;
+
+  @Inject()
+  skillToolBridge: SkillToolBridge;
 
   @Inject()
   workflowService: WorkflowService;
@@ -53,8 +57,8 @@ export class ReactAgentService {
   }
 
   /** 从 Action 注册表构建 tools 列表 */
-  private getTools(): AITool[] {
-    return [...this.actions.values()].map(action => ({
+  private buildTools(actions: Map<string, Action>): AITool[] {
+    return [...actions.values()].map(action => ({
       type: 'function' as const,
       function: {
         name: action.definition().name,
@@ -67,7 +71,6 @@ export class ReactAgentService {
   /** 构建系统提示词 */
   private async buildSystemPrompt(
     conversationId?: string,
-    matchedSkills: { name: string; prompt: string; icon: string }[] = [],
   ): Promise<string> {
     let prompt = this.aiConfig.systemPrompt;
 
@@ -121,14 +124,6 @@ export class ReactAgentService {
           }
         }
       }
-    }
-
-    if (matchedSkills.length > 0) {
-      prompt += `\n\n## 已激活技能`;
-      for (const skill of matchedSkills) {
-        prompt += `\n\n### ${skill.icon} ${skill.name}\n${skill.prompt}`;
-      }
-      prompt += `\n\n请严格按照以上激活的技能指引来回答用户的问题。如果技能指引中要求调用某个工具（如 create_ticket、search_knowledge 等），你必须实际调用该工具，而不是只口头描述流程。`;
     }
 
     return prompt;
@@ -210,24 +205,16 @@ export class ReactAgentService {
       console.log(`[ReAct] 🔄 工作流匹配: 无命中 (${wfMs}ms)`);
     }
 
-    // 匹配技能
-    const skillStart = Date.now();
-    const matchedSkills = await this.skillService.matchByText(userText);
-    const skillMs = Date.now() - skillStart;
-    if (matchedSkills.length > 0) {
-      console.log(`[ReAct] 2️⃣  技能匹配: ${matchedSkills.map(s => `${s.icon}${s.name}`).join(', ')} (${skillMs}ms)`);
-    } else {
-      console.log(`[ReAct] 2️⃣  技能匹配: 无命中 (${skillMs}ms)`);
+    // 加载 Skill Tool（用户自定义工具）
+    const allSkills = await this.skillService.getAllEnabled();
+    const mergedActions = new Map(this.actions);
+    if (allSkills.length > 0) {
+      const skillActions = this.skillToolBridge.toActions(allSkills, this.llmClient);
+      for (const [k, v] of skillActions) mergedActions.set(k, v);
+      console.log(`[ReAct] 🔧 加载 ${allSkills.length} 个 Skill Tool: ${allSkills.map(s => s.name).join(', ')}`);
     }
 
-    const systemPrompt = await this.buildSystemPrompt(conversationId, matchedSkills);
-
-    if (matchedSkills.length > 0) {
-      yield `data: ${JSON.stringify({
-        type: 'skill_match',
-        skills: matchedSkills.map(s => ({ id: s.id, name: s.name, icon: s.icon })),
-      })}\n\n`;
-    }
+    const systemPrompt = await this.buildSystemPrompt(conversationId);
 
     const fullMessages: AIMessage[] = [
       { role: 'system', content: systemPrompt },
@@ -239,7 +226,7 @@ export class ReactAgentService {
     for (let round = 0; round < MAX_REACT_ROUNDS; round++) {
       console.log(`[ReAct] 3️⃣  Round ${round + 1} — 调用 LLM...`);
       const thinkStart = Date.now();
-      const response = await this.llmClient.chat(fullMessages, { tools: this.getTools(), toolChoice: 'auto' });
+      const response = await this.llmClient.chat(fullMessages, { tools: this.buildTools(mergedActions), toolChoice: 'auto' });
       const thinkMs = Date.now() - thinkStart;
       const hasToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
 
@@ -273,7 +260,7 @@ export class ReactAgentService {
         console.log(`[ReAct] 6️⃣  Action: ${funcName}(${JSON.stringify(args).slice(0, 80)})`);
         yield `data: ${JSON.stringify({ type: 'tool_start', tool: funcName, args })}\n\n`;
 
-        const action = this.actions.get(funcName);
+        const action = mergedActions.get(funcName);
         let toolResult: string;
         const toolStart = Date.now();
 

@@ -1,16 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSkills, createSkill, updateSkill, deleteSkill } from '../api';
-import type { Skill } from '../types';
+import { getSkills, createSkill, updateSkill, deleteSkill, generateSkill } from '../api';
+import type { Skill, SkillParameter } from '../types';
 
 const ICON_OPTIONS = ['⚡', '🔧', '📋', '💡', '🎯', '🔍', '📊', '🛠️', '🤝', '📝', '🚀', '🎨', '💰', '📞', '🔔'];
+const PARAM_TYPES = [
+  { value: 'string', label: '文本' },
+  { value: 'number', label: '数字' },
+  { value: 'boolean', label: '布尔' },
+] as const;
+
+const emptyParam = (): SkillParameter => ({
+  name: '', type: 'string', description: '', required: true,
+});
 
 const SkillHub: React.FC = () => {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [formData, setFormData] = useState({
-    name: '', description: '', keywords: '', prompt: '', icon: '⚡',
+    name: '', description: '', tags: '', prompt: '', outputTemplate: '', icon: '⚡',
+    parameters: [] as SkillParameter[],
   });
+
+  // AI 生成状态
+  const [showAiInput, setShowAiInput] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
   const load = useCallback(async () => {
     try { setSkills(await getSkills()); } catch (e) { console.error(e); }
@@ -20,7 +35,7 @@ const SkillHub: React.FC = () => {
 
   const openCreate = () => {
     setEditingSkill(null);
-    setFormData({ name: '', description: '', keywords: '', prompt: '', icon: '⚡' });
+    setFormData({ name: '', description: '', tags: '', prompt: '', outputTemplate: '', icon: '⚡', parameters: [] });
     setShowForm(true);
   };
 
@@ -29,21 +44,24 @@ const SkillHub: React.FC = () => {
     setFormData({
       name: skill.name,
       description: skill.description,
-      keywords: skill.keywords.join(', '),
+      tags: skill.tags.join(', '),
       prompt: skill.prompt,
+      outputTemplate: skill.outputTemplate || '',
       icon: skill.icon,
+      parameters: skill.parameters.length > 0 ? [...skill.parameters] : [],
     });
     setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    const keywords = formData.keywords.split(/[,，]/).map(k => k.trim()).filter(k => k);
-    if (!formData.name || !formData.prompt || keywords.length === 0) return;
+    if (!formData.name || !formData.description || !formData.prompt) return;
+    const tags = formData.tags.split(/[,，]/).map(k => k.trim()).filter(k => k);
+    const params = formData.parameters.filter(p => p.name.trim());
 
     if (editingSkill) {
-      await updateSkill(editingSkill.id, { ...formData, keywords });
+      await updateSkill(editingSkill.id, { ...formData, tags, parameters: params });
     } else {
-      await createSkill({ ...formData, keywords });
+      await createSkill({ ...formData, tags, parameters: params });
     }
     setShowForm(false);
     load();
@@ -60,12 +78,56 @@ const SkillHub: React.FC = () => {
     load();
   };
 
+  // AI 生成
+  const handleAiGenerate = async () => {
+    if (!aiDescription.trim()) return;
+    setAiLoading(true);
+    try {
+      const generated = await generateSkill(aiDescription);
+      setFormData({
+        name: (generated.name as string) || '',
+        description: (generated.description as string) || '',
+        tags: ((generated.tags as string[]) || []).join(', '),
+        prompt: (generated.prompt as string) || '',
+        outputTemplate: (generated.outputTemplate as string) || '',
+        icon: (generated.icon as string) || '⚡',
+        parameters: (generated.parameters as SkillParameter[]) || [],
+      });
+      setShowAiInput(false);
+      setAiDescription('');
+      setShowForm(true);
+    } catch (e: any) {
+      alert(e.message || 'AI 生成失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // 参数编辑
+  const addParam = () => setFormData(p => ({ ...p, parameters: [...p.parameters, emptyParam()] }));
+  const removeParam = (i: number) => setFormData(p => ({ ...p, parameters: p.parameters.filter((_, idx) => idx !== i) }));
+  const updateParam = (i: number, field: string, value: any) => {
+    setFormData(p => ({
+      ...p,
+      parameters: p.parameters.map((param, idx) => idx === i ? { ...param, [field]: value } : param),
+    }));
+  };
+
+  // 可用占位符提示
+  const availablePlaceholders = formData.parameters
+    .filter(p => p.name.trim())
+    .map(p => `{{${p.name}}}`)
+    .join(', ');
+
   return (
     <div style={s.page}>
       <div style={s.header}>
         <h2 style={s.title}>⚡ 技能中心</h2>
-        <p style={s.subtitle}>创建自定义技能，通过关键词在对话中自动触发</p>
-        <button style={s.addBtn} onClick={openCreate}>+ 新建技能</button>
+        <p style={s.subtitle}>创建自定义 AI 工具，通过 Function Calling 在对话中自动调用</p>
+        <div style={s.headerActions}>
+          <button style={s.aiBtn} onClick={() => setShowAiInput(true)}>✨ AI 创建</button>
+          <button style={s.addBtn} onClick={openCreate}>+ 手动创建</button>
+        </div>
       </div>
 
       <div style={s.grid}>
@@ -73,6 +135,9 @@ const SkillHub: React.FC = () => {
           <div style={s.empty}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>⚡</div>
             <div>暂无技能，点击上方按钮创建</div>
+            <div style={{ fontSize: '12px', marginTop: '8px', color: 'rgba(255,255,255,0.15)' }}>
+              技能会作为 AI 工具注册，LLM 在对话中自动判断是否调用
+            </div>
           </div>
         )}
         {skills.map(skill => (
@@ -96,15 +161,29 @@ const SkillHub: React.FC = () => {
               </button>
             </div>
 
-            {skill.description && (
-              <div style={s.cardDesc}>{skill.description}</div>
+            <div style={s.cardDesc}>{skill.description}</div>
+
+            {/* 参数列表 */}
+            {skill.parameters.length > 0 && (
+              <div style={s.paramRow}>
+                {skill.parameters.map((p, i) => (
+                  <span key={i} style={s.paramTag}>
+                    {p.required && <span style={{ color: '#ef4444', marginRight: '2px' }}>*</span>}
+                    {p.name}
+                    <span style={{ opacity: 0.5, marginLeft: '2px' }}>({p.type})</span>
+                  </span>
+                ))}
+              </div>
             )}
 
-            <div style={s.kwRow}>
-              {skill.keywords.map((kw, i) => (
-                <span key={i} style={s.kwTag}>{kw}</span>
-              ))}
-            </div>
+            {/* 标签 */}
+            {skill.tags.length > 0 && (
+              <div style={s.tagRow}>
+                {skill.tags.map((tag, i) => (
+                  <span key={i} style={s.tagChip}>{tag}</span>
+                ))}
+              </div>
+            )}
 
             <div style={s.promptPreview}>
               {skill.prompt.length > 80 ? skill.prompt.slice(0, 80) + '...' : skill.prompt}
@@ -117,6 +196,40 @@ const SkillHub: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* AI 创建弹窗 */}
+      {showAiInput && (
+        <div style={s.overlay} onClick={() => !aiLoading && setShowAiInput(false)}>
+          <div style={s.aiModal} onClick={e => e.stopPropagation()}>
+            <h3 style={s.modalTitle}>✨ AI 智能创建技能</h3>
+            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', margin: '0 0 16px' }}>
+              用自然语言描述你想要的技能，AI 会自动生成完整定义
+            </p>
+            <textarea
+              style={{ ...s.textarea, minHeight: '120px' }}
+              value={aiDescription}
+              onChange={e => setAiDescription(e.target.value)}
+              placeholder="例如：帮我创建一个处理用户退款请求的技能，需要知道订单号和退款原因，按照标准流程处理..."
+              disabled={aiLoading}
+              autoFocus
+            />
+            <div style={s.modalActions}>
+              <button style={s.cancelBtn} onClick={() => setShowAiInput(false)} disabled={aiLoading}>取消</button>
+              <button
+                style={{
+                  ...s.submitBtn,
+                  opacity: aiDescription.trim() && !aiLoading ? 1 : 0.4,
+                  minWidth: '120px',
+                }}
+                onClick={handleAiGenerate}
+                disabled={!aiDescription.trim() || aiLoading}
+              >
+                {aiLoading ? '🤖 AI 生成中...' : '✨ 生成技能'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新建/编辑弹窗 */}
       {showForm && (
@@ -147,29 +260,94 @@ const SkillHub: React.FC = () => {
               placeholder="如: 退款处理"
             />
 
-            <label style={s.label}>描述</label>
-            <input
-              style={s.input}
+            <label style={s.label}>
+              Tool 描述 * <span style={s.hint}>告诉 AI 何时使用这个技能（覆盖尽可能多的触发场景）</span>
+            </label>
+            <textarea
+              style={{ ...s.textarea, minHeight: '80px' }}
               value={formData.description}
               onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
-              placeholder="简要描述技能用途"
+              placeholder="当用户需要退款、退货、换货、取消订单、对商品不满意时使用。即使用户没有明确说'退款'，只要涉及售后问题也应使用。"
+              rows={3}
             />
 
-            <label style={s.label}>触发关键词 * <span style={s.hint}>用逗号分隔</span></label>
+            <label style={s.label}>标签 <span style={s.hint}>用逗号分隔，用于分类</span></label>
             <input
               style={s.input}
-              value={formData.keywords}
-              onChange={e => setFormData(p => ({ ...p, keywords: e.target.value }))}
-              placeholder="如: 退款, 退货, 退钱"
+              value={formData.tags}
+              onChange={e => setFormData(p => ({ ...p, tags: e.target.value }))}
+              placeholder="如: 售后, 退款, 客服"
             />
 
-            <label style={s.label}>Prompt 模板 *</label>
+            {/* 参数编辑器 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '18px' }}>
+              <label style={{ ...s.label, margin: 0 }}>输入参数</label>
+              <button style={s.addParamBtn} onClick={addParam}>+ 添加参数</button>
+            </div>
+
+            {formData.parameters.length > 0 && (
+              <div style={s.paramEditor}>
+                {formData.parameters.map((param, i) => (
+                  <div key={i} style={s.paramItem}>
+                    <input
+                      style={{ ...s.input, flex: '1 1 120px', minWidth: 0 }}
+                      value={param.name}
+                      onChange={e => updateParam(i, 'name', e.target.value)}
+                      placeholder="参数名 (英文)"
+                    />
+                    <select
+                      style={{ ...s.input, flex: '0 0 80px', minWidth: 0 }}
+                      value={param.type}
+                      onChange={e => updateParam(i, 'type', e.target.value)}
+                    >
+                      {PARAM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <input
+                      style={{ ...s.input, flex: '2 1 160px', minWidth: 0 }}
+                      value={param.description}
+                      onChange={e => updateParam(i, 'description', e.target.value)}
+                      placeholder="参数描述"
+                    />
+                    <button
+                      style={{
+                        ...s.toggleBtn,
+                        background: param.required ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)',
+                        color: param.required ? '#ef4444' : 'rgba(255,255,255,0.3)',
+                        flex: '0 0 auto',
+                      }}
+                      onClick={() => updateParam(i, 'required', !param.required)}
+                    >
+                      {param.required ? '必填' : '选填'}
+                    </button>
+                    <button style={s.removeParamBtn} onClick={() => removeParam(i)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label style={s.label}>
+              Prompt 模板 *
+              {availablePlaceholders && (
+                <span style={{ ...s.hint, marginLeft: '8px' }}>
+                  可用参数: {availablePlaceholders}
+                </span>
+              )}
+            </label>
             <textarea
               style={s.textarea}
               value={formData.prompt}
               onChange={e => setFormData(p => ({ ...p, prompt: e.target.value }))}
-              placeholder="当用户消息触发该技能时，此 Prompt 会被注入 AI 的系统提示词中..."
+              placeholder="当此技能被调用时执行的 Prompt。用 {{参数名}} 引用参数值..."
               rows={5}
+            />
+
+            <label style={s.label}>输出格式模板 <span style={s.hint}>可选，留空则 AI 自由回复</span></label>
+            <textarea
+              style={{ ...s.textarea, minHeight: '60px' }}
+              value={formData.outputTemplate}
+              onChange={e => setFormData(p => ({ ...p, outputTemplate: e.target.value }))}
+              placeholder="如: ## 处理结果\n- 订单号: ...\n- 状态: ..."
+              rows={2}
             />
 
             <div style={s.modalActions}>
@@ -177,7 +355,7 @@ const SkillHub: React.FC = () => {
               <button
                 style={{
                   ...s.submitBtn,
-                  opacity: formData.name && formData.prompt && formData.keywords ? 1 : 0.4,
+                  opacity: formData.name && formData.description && formData.prompt ? 1 : 0.4,
                 }}
                 onClick={handleSubmit}
               >
@@ -206,8 +384,19 @@ const s: Record<string, React.CSSProperties> = {
   subtitle: {
     margin: '4px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.35)',
   },
-  addBtn: {
+  headerActions: {
     position: 'absolute', top: '24px', right: '28px',
+    display: 'flex', gap: '8px',
+  },
+  aiBtn: {
+    padding: '8px 18px',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
+    border: 'none', borderRadius: '10px',
+    color: '#fff', fontSize: '13px', fontWeight: 600,
+    cursor: 'pointer', transition: 'all 0.2s',
+    fontFamily: "'Inter', 'PingFang SC', sans-serif",
+  },
+  addBtn: {
     padding: '8px 18px',
     background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
     border: 'none', borderRadius: '10px',
@@ -250,10 +439,17 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px',
     lineHeight: 1.5,
   },
-  kwRow: {
-    display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px',
+  paramRow: {
+    display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px',
   },
-  kwTag: {
+  paramTag: {
+    fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
+    background: 'rgba(16,185,129,0.12)', color: '#34d399', fontWeight: 600,
+  },
+  tagRow: {
+    display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px',
+  },
+  tagChip: {
     fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
     background: 'rgba(99,102,241,0.12)', color: '#a78bfa', fontWeight: 600,
   },
@@ -281,6 +477,28 @@ const s: Record<string, React.CSSProperties> = {
     fontFamily: "'Inter', sans-serif", transition: 'all 0.15s',
   },
 
+  // 参数编辑器
+  paramEditor: {
+    display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px',
+  },
+  paramItem: {
+    display: 'flex', gap: '6px', alignItems: 'center',
+  },
+  addParamBtn: {
+    padding: '3px 10px', borderRadius: '6px',
+    border: '1px solid rgba(16,185,129,0.2)',
+    background: 'rgba(16,185,129,0.08)', color: '#34d399',
+    fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+    fontFamily: "'Inter', sans-serif",
+  },
+  removeParamBtn: {
+    width: '24px', height: '24px', borderRadius: '6px',
+    border: '1px solid rgba(239,68,68,0.15)',
+    background: 'rgba(239,68,68,0.06)', color: 'rgba(239,68,68,0.5)',
+    fontSize: '11px', cursor: 'pointer', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+
   // Modal
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -288,9 +506,16 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   },
   modal: {
-    width: '520px', maxHeight: '80vh', overflowY: 'auto',
+    width: '600px', maxHeight: '85vh', overflowY: 'auto',
     background: 'linear-gradient(180deg, #141428 0%, #0e0e20 100%)',
     border: '1px solid rgba(99,102,241,0.15)',
+    borderRadius: '16px', padding: '28px',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+  },
+  aiModal: {
+    width: '520px', maxHeight: '60vh', overflowY: 'auto',
+    background: 'linear-gradient(180deg, #0f2922 0%, #0e0e20 100%)',
+    border: '1px solid rgba(16,185,129,0.2)',
     borderRadius: '16px', padding: '28px',
     boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
   },
