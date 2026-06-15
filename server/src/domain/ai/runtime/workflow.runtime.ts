@@ -7,10 +7,8 @@ import { IAgentRuntime, RuntimeContext } from './runtime.interface';
 import { AIMessage } from '../model/ai.model';
 import { WorkflowRuntimeConfig } from '../../blueprint/model/blueprint.model';
 import { WorkflowService } from '../../workflow/service/workflow.service';
-import { Action, ActionContext } from '../action/action.interface';
-import { CreateTicketAction } from '../action/create-ticket.action';
-import { SearchKnowledgeAction } from '../action/search-knowledge.action';
-import { SaveCustomerInfoAction } from '../action/save-customer-info.action';
+import { ActionContext } from '../action/action.interface';
+import { ActionRegistry } from '../action/action-registry';
 import { ILLMClient } from '../port/llm.port';
 
 @Provide()
@@ -22,22 +20,8 @@ export class WorkflowRuntime implements IAgentRuntime {
   @Inject('llmClient')
   llmClient: ILLMClient;
 
-  @Inject('action:create_ticket')
-  createTicketAction: CreateTicketAction;
-
-  @Inject('action:search_knowledge')
-  searchKnowledgeAction: SearchKnowledgeAction;
-
-  @Inject('action:save_customer_info')
-  saveCustomerInfoAction: SaveCustomerInfoAction;
-
-  private get actions(): Map<string, Action> {
-    const map = new Map<string, Action>();
-    map.set('create_ticket', this.createTicketAction);
-    map.set('search_knowledge', this.searchKnowledgeAction);
-    map.set('save_customer_info', this.saveCustomerInfoAction);
-    return map;
-  }
+  @Inject()
+  actionRegistry: ActionRegistry;
 
   async *execute(
     messages: AIMessage[],
@@ -64,7 +48,7 @@ export class WorkflowRuntime implements IAgentRuntime {
     const actionContext: ActionContext = { conversationId: context.conversationId, userId: context.userId };
 
     for await (const event of this.workflowService.executeWorkflow(
-      workflow, userText, this.actions, actionContext
+      workflow, userText, this.actionRegistry.getAll(), actionContext
     )) {
       yield event;
     }

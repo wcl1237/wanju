@@ -9,12 +9,7 @@ import { getSkills } from '../../skill/api';
 import type { Workflow } from '../../workflow/types';
 import type { Agent } from '../../agent/types';
 import type { Skill } from '../../skill/types';
-
-const AVAILABLE_ACTIONS = [
-  { name: 'search_knowledge', label: '知识检索', icon: '📚' },
-  { name: 'create_ticket', label: '创建工单', icon: '🎫' },
-  { name: 'save_customer_info', label: '保存客户信息', icon: '💾' },
-];
+import { AVAILABLE_ACTIONS } from '../../../shared/constants/actions';
 
 const BlueprintEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();

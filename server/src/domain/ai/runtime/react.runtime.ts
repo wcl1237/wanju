@@ -11,12 +11,10 @@ import { AIMessage, AITool } from '../model/ai.model';
 import { ReactRuntimeConfig } from '../../blueprint/model/blueprint.model';
 import { ILLMClient } from '../port/llm.port';
 import { Action, ActionContext } from '../action/action.interface';
+import { ActionRegistry } from '../action/action-registry';
 import { CustomerService } from '../../customer/service/customer.service';
 import { SkillService } from '../../skill/service/skill.service';
 import { WorkflowService } from '../../workflow/service/workflow.service';
-import { CreateTicketAction } from '../action/create-ticket.action';
-import { SearchKnowledgeAction } from '../action/search-knowledge.action';
-import { SaveCustomerInfoAction } from '../action/save-customer-info.action';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -33,23 +31,8 @@ export class ReactRuntime implements IAgentRuntime {
   @Inject()
   workflowService: WorkflowService;
 
-  @Inject('action:create_ticket')
-  createTicketAction: CreateTicketAction;
-
-  @Inject('action:search_knowledge')
-  searchKnowledgeAction: SearchKnowledgeAction;
-
-  @Inject('action:save_customer_info')
-  saveCustomerInfoAction: SaveCustomerInfoAction;
-
-  /** 全局 Action 注册表 */
-  private get allActions(): Map<string, Action> {
-    const map = new Map<string, Action>();
-    map.set('create_ticket', this.createTicketAction);
-    map.set('search_knowledge', this.searchKnowledgeAction);
-    map.set('save_customer_info', this.saveCustomerInfoAction);
-    return map;
-  }
+  @Inject()
+  actionRegistry: ActionRegistry;
 
   async *execute(
     messages: AIMessage[],
@@ -63,11 +46,7 @@ export class ReactRuntime implements IAgentRuntime {
     const userText = lastUserMsg?.content || '';
 
     // 过滤可用 Actions
-    const enabledActions = new Map<string, Action>();
-    for (const name of config.actions) {
-      const action = this.allActions.get(name);
-      if (action) enabledActions.set(name, action);
-    }
+    const enabledActions = this.actionRegistry.getEnabled(config.actions);
 
     // ① 工作流匹配（仅当配置了可触发工作流时才启用）
     if (config.workflowIds && config.workflowIds.length > 0) {

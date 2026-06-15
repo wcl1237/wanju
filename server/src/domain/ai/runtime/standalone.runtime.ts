@@ -9,9 +9,7 @@ import { StandaloneRuntimeConfig } from '../../blueprint/model/blueprint.model';
 import { ILLMClient } from '../port/llm.port';
 import { AgentService } from '../../agent/service/agent.service';
 import { Action, ActionContext } from '../action/action.interface';
-import { CreateTicketAction } from '../action/create-ticket.action';
-import { SearchKnowledgeAction } from '../action/search-knowledge.action';
-import { SaveCustomerInfoAction } from '../action/save-customer-info.action';
+import { ActionRegistry } from '../action/action-registry';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -22,22 +20,8 @@ export class StandaloneRuntime implements IAgentRuntime {
   @Inject()
   agentService: AgentService;
 
-  @Inject('action:create_ticket')
-  createTicketAction: CreateTicketAction;
-
-  @Inject('action:search_knowledge')
-  searchKnowledgeAction: SearchKnowledgeAction;
-
-  @Inject('action:save_customer_info')
-  saveCustomerInfoAction: SaveCustomerInfoAction;
-
-  private get allActions(): Map<string, Action> {
-    const map = new Map<string, Action>();
-    map.set('create_ticket', this.createTicketAction);
-    map.set('search_knowledge', this.searchKnowledgeAction);
-    map.set('save_customer_info', this.saveCustomerInfoAction);
-    return map;
-  }
+  @Inject()
+  actionRegistry: ActionRegistry;
 
   async *execute(
     messages: AIMessage[],
@@ -53,11 +37,7 @@ export class StandaloneRuntime implements IAgentRuntime {
     }
 
     // 构建可用工具
-    const enabledActions = new Map<string, Action>();
-    for (const name of config.actions) {
-      const action = this.allActions.get(name);
-      if (action) enabledActions.set(name, action);
-    }
+    const enabledActions = this.actionRegistry.getEnabled(config.actions);
 
     const tools: AITool[] = [...enabledActions.values()].map(a => ({
       type: 'function' as const,

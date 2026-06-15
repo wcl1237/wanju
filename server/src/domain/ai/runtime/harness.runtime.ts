@@ -18,10 +18,8 @@ import {
 import { ILLMClient } from '../port/llm.port';
 import { WorkflowService } from '../../workflow/service/workflow.service';
 import { AgentService } from '../../agent/service/agent.service';
-import { Action, ActionContext } from '../action/action.interface';
-import { CreateTicketAction } from '../action/create-ticket.action';
-import { SearchKnowledgeAction } from '../action/search-knowledge.action';
-import { SaveCustomerInfoAction } from '../action/save-customer-info.action';
+import { ActionContext } from '../action/action.interface';
+import { ActionRegistry } from '../action/action-registry';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -35,22 +33,8 @@ export class HarnessRuntime implements IAgentRuntime {
   @Inject()
   agentService: AgentService;
 
-  @Inject('action:create_ticket')
-  createTicketAction: CreateTicketAction;
-
-  @Inject('action:search_knowledge')
-  searchKnowledgeAction: SearchKnowledgeAction;
-
-  @Inject('action:save_customer_info')
-  saveCustomerInfoAction: SaveCustomerInfoAction;
-
-  private get allActions(): Map<string, Action> {
-    const map = new Map<string, Action>();
-    map.set('create_ticket', this.createTicketAction);
-    map.set('search_knowledge', this.searchKnowledgeAction);
-    map.set('save_customer_info', this.saveCustomerInfoAction);
-    return map;
-  }
+  @Inject()
+  actionRegistry: ActionRegistry;
 
   async *execute(
     messages: AIMessage[],
@@ -130,7 +114,7 @@ export class HarnessRuntime implements IAgentRuntime {
   private async *executeActionStep(
     config: ActionStepConfig, ctx: Record<string, any>, actionContext: ActionContext
   ): AsyncGenerator<string> {
-    const action = this.allActions.get(config.actionName);
+    const action = this.actionRegistry.getAll().get(config.actionName);
     if (!action) {
       ctx[config.outputKey] = { error: `未知 Action: ${config.actionName}` };
       return;
@@ -159,7 +143,7 @@ export class HarnessRuntime implements IAgentRuntime {
 
     let output = '';
     for await (const event of this.workflowService.executeWorkflow(
-      workflow, ctx['userMessage'] || '', this.allActions, actionContext
+      workflow, ctx['userMessage'] || '', this.actionRegistry.getAll(), actionContext
     )) {
       yield event;
       try {
