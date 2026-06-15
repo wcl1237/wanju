@@ -14,7 +14,7 @@ function CustomNode({ id, data, type, selected }: NodeProps) {
   const meta = NODE_TYPES_META[type || 'trigger'] || NODE_TYPES_META.trigger;
   const summary = getNodeSummary(type || '', data as Record<string, any>);
   const isCondition = type === 'condition';
-  const isTrigger = type === 'trigger';
+  const isStart = type === 'start' || type === 'trigger';
   const isEnd = type === 'end';
   const targetPos = direction === 'LR' ? Position.Left : Position.Top;
   const sourcePos = direction === 'LR' ? Position.Right : Position.Bottom;
@@ -26,7 +26,7 @@ function CustomNode({ id, data, type, selected }: NodeProps) {
       boxShadow: selected ? `0 0 24px ${meta.color}40` : '0 2px 8px rgba(0,0,0,0.4)',
     }}>
       {/* 入口 Handle */}
-      {!isTrigger && (
+      {!isStart && (
         <Handle type="target" position={targetPos} style={nodeStyles.handle} />
       )}
 
