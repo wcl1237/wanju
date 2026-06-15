@@ -46,7 +46,6 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
       } else {
         const simplePrompt = `${systemPrompt}\n\n用户消息: ${ctx.userMessage}\n\n请根据以上信息回复用户。`;
         let fullContent = '';
-        yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
         try {
           const stream = deps.llmClient.completeStream(simplePrompt, { temperature: 0.7, maxTokens: 4000 });
           for await (const chunk of stream) {
@@ -57,7 +56,6 @@ ${resultsSummary ? `上游节点结果:\n${resultsSummary}` : ''}`;
         } catch {
           if (!fullContent) fullContent = 'Agent 执行完成。';
         }
-        yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
         agentReply = fullContent;
       }
 

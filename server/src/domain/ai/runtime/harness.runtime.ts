@@ -107,7 +107,6 @@ export class HarnessRuntime implements IAgentRuntime {
     const prompt = this.templateReplace(config.prompt, ctx);
     let fullContent = '';
 
-    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
     try {
       const stream = this.llmClient.completeStream(prompt, { temperature: config.temperature || 0.7, maxTokens: 4000 });
       for await (const chunk of stream) {
@@ -120,7 +119,6 @@ export class HarnessRuntime implements IAgentRuntime {
 
     ctx[config.outputKey] = fullContent;
     ctx['__finalOutput'] = fullContent;
-    yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
     yield `data: ${JSON.stringify({ type: 'harness_llm', outputKey: config.outputKey, preview: fullContent.slice(0, 200) })}\n\n`;
   }
 
@@ -184,7 +182,6 @@ export class HarnessRuntime implements IAgentRuntime {
     const prompt = `${agent.prompt}\n\n任务: ${task}`;
     let fullContent = '';
 
-    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
     try {
       const stream = this.llmClient.completeStream(prompt, { temperature: 0.7, maxTokens: 4000 });
       for await (const chunk of stream) {
@@ -197,7 +194,6 @@ export class HarnessRuntime implements IAgentRuntime {
 
     ctx[config.outputKey] = fullContent;
     ctx['__finalOutput'] = fullContent;
-    yield `data: ${JSON.stringify({ type: 'content_stream_end' })}\n\n`;
     yield `data: ${JSON.stringify({ type: 'harness_agent', agentName: agent.name, preview: fullContent.slice(0, 200) })}\n\n`;
   }
 

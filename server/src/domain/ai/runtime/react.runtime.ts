@@ -178,7 +178,6 @@ export class ReactRuntime implements IAgentRuntime {
 
     // 超过最大轮次，强制生成回复（流式）
     try {
-      yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
       for await (const chunk of this.llmClient.chatStream(fullMessages)) {
         yield contentChunkEvent(chunk);
       }
@@ -243,7 +242,6 @@ export class ReactRuntime implements IAgentRuntime {
   private async *streamContent(content: string): AsyncGenerator<string> {
     const clean = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     if (!clean) return;
-    yield `data: ${JSON.stringify({ type: 'content_stream_start' })}\n\n`;
     const chunkSize = 10;
     for (let i = 0; i < clean.length; i += chunkSize) {
       yield contentChunkEvent(clean.slice(i, i + chunkSize));
