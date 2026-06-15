@@ -11,17 +11,31 @@
 - **多模型支持** — 通义千问（Qwen）、Ollama 本地模型、OpenAI 兼容接口
 - **三层记忆系统** — 短期记忆（Redis）+ 长期记忆（mem0 向量化）+ 持久化（SQLite）
 - **SSE 流式响应** — 实时推送思考过程、工具调用、工作流执行状态
+- **停止生成** — 支持用户手动终止正在执行的对话 / 工作流
 
 ### ⚙️ 可视化工作流
-- **拖拽式流程编辑器** — 基于 React Flow，支持 12 种节点类型
+- **拖拽式流程编辑器** — 基于 React Flow，支持 13 种节点类型
 - **多种触发方式** — 关键词匹配、AI 意图识别、正则表达式、始终触发
-- **节点类型** — 触发器、参数提取、条件分支、消息回复、AI 生成、知识检索、工单创建、HTTP 请求、单 Agent、Agent Teams、Master-Sub Agent、结束
+- **节点类型** — 开始、触发器（兼容旧数据）、参数提取、条件分支、消息回复、AI 生成、知识检索、工单创建、HTTP 请求、单 Agent、Agent Teams、Master-Sub Agent、结束
 - **两种执行模式** — 独立模式（工作流独立回复） / 替代输入模式（工作流输出替代用户消息继续对话）
+- **AI 智能搭建** — 描述需求后 AI 自动生成完整工作流图
+- **节点对话反馈** — 节点执行后可配置固定文案、AI 自动生成或透传输出到对话窗口
+- **条件重试机制** — 条件节点支持 `maxRetries`，超过最大重试次数自动强制通过
+- **LLM 结论提取** — AI 生成节点可配置 `resultField`，自动提取 PASS/FAIL 结论供下游条件判断
+- **流式 LLM 输出** — AI 生成节点支持逐 token 流式推送（`content_chunk` 事件）
 
 ### 🧑‍💼 Agent 池
 - **Agent 管理** — 创建、编辑、启用/禁用 AI Agent
 - **AI Prompt 生成** — 根据 Agent 名称和描述自动生成 System Prompt
+- **能力配置** — 每个 Agent 可独立配置可用 Action、技能和工作流
 - **工作流集成** — Agent 可在工作流中被调用，支持单 Agent、Agent Teams（并行协作 + 共享黑板）、Master-Sub Agent（编排调度）三种模式
+
+### 🏗 智能体蓝图（Blueprint）
+- **三种运行时** — ReAct（全功能对话）、Workflow（直接执行绑定工作流）、Harness（可编排处理链）
+- **蓝图管理** — 创建、编辑、启用/禁用蓝图，每个蓝图对应一个可部署的智能体
+- **对话隔离** — 对话按 `blueprintId` 隔离，不同智能体各自独立对话
+- **能力继承** — ReAct 蓝图可绑定 Agent 池中的 Agent，继承其 actions / skills / workflows
+- **RuntimeFactory** — 根据 `runtimeType` 自动创建对应的运行时引擎
 
 ### 📚 RAG 知识库
 - **文档管理** — 上传 / 在线编辑知识文档
@@ -57,8 +71,20 @@ server/src/
 │   ├── agent/                # Agent 池（entity/model/port/service）
 │   ├── ai/                   # AI 智能域（action/model/port/service）
 │   │   ├── action/           # ReAct Action（create_ticket/search_knowledge/save_customer_info）
+│   │   │   └── action-registry.ts  # 集中管理 Action 注册与查询
 │   │   ├── port/             # LLM 端口接口（ILLMClient）
+│   │   ├── runtime/          # 运行时引擎
+│   │   │   ├── runtime.interface.ts   # IAgentRuntime 接口
+│   │   │   ├── runtime.factory.ts     # RuntimeFactory（按 runtimeType 创建引擎）
+│   │   │   ├── react.runtime.ts       # ReAct 运行时
+│   │   │   ├── workflow.runtime.ts    # Workflow 运行时
+│   │   │   └── harness.runtime.ts     # Harness 运行时（可编排处理链）
 │   │   └── service/          # ReactAgentService（ReAct 循环核心）
+│   ├── blueprint/            # 智能体蓝图域
+│   │   ├── entity/           # TypeORM Entity
+│   │   ├── model/            # AgentBlueprint 模型 + RuntimeConfig 类型
+│   │   ├── port/             # IBlueprintRepository 接口
+│   │   └── service/          # BlueprintService
 │   ├── auth/                 # 认证域
 │   ├── chat/                 # 对话域（entity/model/port/service）
 │   ├── customer/             # 客户域
@@ -66,7 +92,7 @@ server/src/
 │   ├── skill/                # 技能域
 │   ├── ticket/               # 工单域
 │   └── workflow/             # 工作流域
-│       ├── executor/         # 节点执行器（Strategy 插件模式，12 种节点）
+│       ├── executor/         # 节点执行器（Strategy 插件模式，13 种节点）
 │       ├── model/            # 领域模型 + SSE 事件协议
 │       ├── port/             # 仓储接口
 │       └── service/          # GraphEngineService 图遍历引擎
@@ -90,20 +116,26 @@ web/src/
 ├── features/                 # Feature-Sliced 架构
 │   ├── agent/                # Agent 池管理
 │   ├── auth/                 # 登录认证
-│   ├── chat/                 # AI 对话（SSE 流式 + 工具状态追踪）
+│   ├── blueprint/            # 智能体蓝图管理（新增）
+│   │   ├── components/       # BlueprintPage + BlueprintEditor
+│   │   ├── api.ts            # 蓝图 API
+│   │   └── types.ts          # 蓝图类型定义
+│   ├── chat/                 # AI 对话（SSE 流式 + 工具状态追踪 + 停止按钮）
 │   ├── customer/             # 客户信息卡片
+│   ├── home/                 # 首页操作手册（新增）
 │   ├── knowledge/            # 知识库管理
 │   ├── skill/                # 技能中心
 │   ├── ticket/               # 工单管理
 │   ├── trace/                # 对话轨迹可视化
 │   └── workflow/             # 工作流编辑器
-│       ├── components/       # 拆分组件（CustomNode/PropertyPanel/TopBar/NodePalette）
+│       ├── components/       # CustomNode/PropertyPanel/TopBar/NodePalette
 │       ├── constants/        # 节点类型元数据
 │       ├── store/            # Zustand 状态管理
 │       ├── styles/           # 分离样式
 │       └── utils/            # 工具函数
 ├── shared/                   # 共享组件和工具
 │   ├── components/           # NavSidebar 等
+│   ├── constants/            # 共享常量（AVAILABLE_ACTIONS 等）
 │   └── http-client.ts        # Cookie 鉴权 fetch 封装
 └── App.tsx                   # 路由 + 布局
 ```
@@ -188,8 +220,11 @@ cd server && npm start
 |------|------|------|
 | **认证** | `POST /api/auth/login` | 登录 |
 | **对话** | `POST /api/chat/conversations/:id/messages` | 发送消息（SSE） |
+| **对话** | `POST /api/chat/conversations/:id/stop` | 停止生成 |
 | **对话** | `GET /api/chat/conversations` | 获取对话列表 |
+| **蓝图** | `GET/POST/PUT/DELETE /api/blueprints` | 智能体蓝图 CRUD |
 | **工作流** | `GET/POST/PUT/DELETE /api/workflows` | 工作流 CRUD |
+| **工作流** | `POST /api/workflows/generate` | AI 智能搭建工作流 |
 | **Agent** | `GET/POST/PUT/DELETE /api/agents` | Agent 池 CRUD |
 | **Agent** | `POST /api/agents/generate-prompt` | AI 生成 Prompt |
 | **知识库** | `GET/POST/DELETE /api/knowledge` | 知识文档管理 |

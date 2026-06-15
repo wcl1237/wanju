@@ -6,20 +6,25 @@
 
 ## 1. 概述
 
-WanJu 系统中有两套 Agent 体系：
+WanJu 系统中有三层 Agent 体系：
 
 | 体系 | 角色 | 入口 |
 |------|------|------|
-| **ReAct Agent** | 全局对话 Agent，所有用户消息的入口 | `ReactAgentService.chatStream()` |
+| **Blueprint 蓝图** | 可部署的智能体单元，定义运行时类型和配置 | `BlueprintService` + `RuntimeFactory` |
+| **ReAct Agent** | 全局对话 Agent，所有用户消息的入口 | `ReactRuntime.execute()` |
 | **Agent 池** | 可配置的 Agent 集合，在工作流节点中被调用 | `AgentService` + 工作流 Executor |
 
 ```mermaid
 graph TD
-    User[用户消息] --> ReAct[ReAct Agent]
+    User[用户消息] --> BP[Blueprint 蓝图]
+    BP -->|runtimeType=react| ReAct[ReAct Runtime]
+    BP -->|runtimeType=workflow| WFR[Workflow Runtime]
+    BP -->|runtimeType=harness| HR[Harness Runtime]
+
     ReAct -->|意图匹配| WF[工作流引擎]
     ReAct -->|技能匹配| Skill[技能系统]
     ReAct -->|直接对话| LLM[LLM 模型]
-    ReAct -->|Function Calling| Actions[Action 注册表]
+    ReAct -->|Function Calling| Actions[ActionRegistry]
 
     WF -->|Agent 节点| Agent1[单 Agent]
     WF -->|AgentTeam 节点| Agent2[Agent Teams]
@@ -100,9 +105,22 @@ ReAct Agent 的 System Prompt 由以下部分动态拼接：
 
 ---
 
-## 3. Action 注册表 — ReAct 的工具箱
+## 3. ActionRegistry — 集中管理工具箱
 
-### 3.1 Action 接口
+### 3.1 ActionRegistry
+
+Action 的注册与查询由 [`ActionRegistry`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/action/action-registry.ts) 集中管理，消除了各 Runtime 中重复注入 Action 的代码。
+
+```typescript
+// ✅ 推荐：使用 ActionRegistry
+@Inject()
+actionRegistry: ActionRegistry;
+
+const allActions = this.actionRegistry.getAll();           // 获取全部
+const enabled = this.actionRegistry.getEnabled(['search_knowledge']); // 按名称子集
+```
+
+### 3.2 Action 接口
 
 所有 Action 实现 [`Action`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/action/action.interface.ts) 接口：
 
@@ -118,7 +136,7 @@ interface ActionResult {
 }
 ```
 
-### 3.2 内置 Action
+### 3.3 内置 Action
 
 | Action | 文件 | 功能 |
 |--------|------|------|
@@ -126,12 +144,12 @@ interface ActionResult {
 | `search_knowledge` | [`search-knowledge.action.ts`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/action/search-knowledge.action.ts) | 搜索知识库（RAG） |
 | `save_customer_info` | [`save-customer-info.action.ts`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/action/save-customer-info.action.ts) | 保存用户信息到客户档案 |
 
-### 3.3 添加新 Action
+### 3.4 添加新 Action
 
 1. 创建 `server/src/domain/ai/action/<name>.action.ts`
 2. 实现 `Action` 接口
 3. 在 `configuration.ts` 中注册 IoC 标识
-4. 在 `ReactAgentService.actions` getter 中添加映射
+4. 在 `ActionRegistry` 中添加注入和注册
 
 ```typescript
 // 示例：查询物流 Action
@@ -290,15 +308,18 @@ sequenceDiagram
 
 ### 6.1 端口接口
 
-[`ILLMClient`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/port/llm.port.ts) 定义了三个方法：
+[`ILLMClient`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/port/llm.port.ts) 定义了四个方法：
 
 ```typescript
 interface ILLMClient {
   chat(messages, options?): Promise<LLMChatResult>;      // 非流式（支持 tool calling）
-  chatStream(messages): AsyncGenerator<string>;           // 流式（纯文本）
+  chatStream(messages): AsyncGenerator<string>;           // 流式对话（纯文本）
   complete(prompt, options?): Promise<string>;            // 简单文本补全
+  completeStream(prompt, options?): AsyncGenerator<string>; // 流式文本补全（逐 token）
 }
 ```
+
+> `completeStream` 用于工作流 LLM 节点的流式输出，前端通过 `content_chunk` 事件逐 token 追加显示。
 
 ### 6.2 实现
 
@@ -310,17 +331,19 @@ interface ILLMClient {
 
 Agent 执行过程中通过 SSE 实时推送事件到前端：
 
-| 事件类型 | 触发时机 | 字段 |
-|----------|----------|------|
+| 事件类型 | 触发时机 | 关键字段 |
+|----------|----------|----------|
 | `skill_match` | 技能匹配成功 | `skills: [{id, name, icon}]` |
 | `thinking_end` | 一轮思考完成 | `round, content, timeMs` |
 | `tool_start` | 开始调用工具 | `tool, args` |
 | `tool_result` | 工具返回结果 | `tool, result, timeMs` |
-| `content` | 输出文本片段 | `content` |
+| `content` | 完整内容输出（独立气泡） | `content` |
+| `content_chunk` | 流式 token 输出（追加到当前气泡） | `chunk` |
 | `workflow_match` | 工作流匹配成功 | `workflowId, workflowName, workflowIcon` |
+| `workflow_start` | 工作流开始执行 | `workflowId, workflowName, stepCount` |
 | `workflow_step` | 工作流步骤完成 | `stepIndex, nodeId, stepType, result, timeMs` |
 | `workflow_llm` | 工作流 LLM 调用 | `stage, nodeId, purpose` |
-| `workflow_end` | 工作流执行结束 | `totalSteps, timeMs` |
+| `workflow_end` | 工作流执行结束 | `totalSteps, totalTimeMs` |
 | `error` | 错误 | `content` |
 
 ---
@@ -349,18 +372,71 @@ getAIContext(conversationId, userId)
 
 ---
 
-## 9. 开发指南
+## 9. Blueprint 蓝图系统
+
+### 9.1 概述
+
+AgentBlueprint（智能体蓝图）是可部署的智能体单元，定义了智能体的运行时类型和完整配置。例如系统默认的「智能对话」就是一个 `runtimeType='react'` 的蓝图实例。
+
+### 9.2 运行时类型
+
+| RuntimeType | 运行时 | 说明 |
+|-------------|--------|------|
+| `react` | [`ReactRuntime`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/runtime/react.runtime.ts) | 完整 ReAct Agent — Thought/Action/Observation 循环 |
+| `workflow` | [`WorkflowRuntime`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/runtime/workflow.runtime.ts) | 直接执行绑定的工作流 |
+| `harness` | [`HarnessRuntime`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/runtime/harness.runtime.ts) | 可编排处理链（LLM/Action/Workflow/Agent 步骤 + 条件/循环） |
+
+### 9.3 RuntimeFactory
+
+[`RuntimeFactory`](file:///Users/wangchanglong/Desktop/code/wanju/server/src/domain/ai/runtime/runtime.factory.ts) 根据 `runtimeType` 创建对应的运行时引擎：
+
+```typescript
+const runtime = this.runtimeFactory.create(blueprint.runtimeType);
+yield* runtime.execute(messages, { blueprintId, config: blueprint.config });
+```
+
+### 9.4 ReAct 蓝图配置
+
+```typescript
+interface ReactRuntimeConfig {
+  systemPrompt: string;
+  agentId?: string;                // 绑定 Agent 池中的 Agent
+  actions: string[];               // 可用 Action 名称列表
+  skillIds: string[];              // 可用技能 ID 列表
+  workflowIds: string[];           // 可用工作流 ID 列表
+  maxRounds: number;               // ReAct 最大循环轮数
+  temperature: number;
+  enableMemory: boolean;           // 是否启用记忆系统
+  enableCustomerCollection: boolean; // 是否启用客户信息收集
+  inheritAgentCapabilities: boolean; // 继承绑定 Agent 的 actions/skills/workflows
+}
+```
+
+### 9.5 对话隔离
+
+对话按 `blueprintId` 隔离，不同蓝图各自独立的对话列表。前端通过 URL 参数 `?blueprint=<id>` 传递蓝图标识。
+
+---
+
+## 10. 开发指南
 
 ### 添加新 Action（工具）
 
-参见 [RULES.md](file:///Users/wangchanglong/Desktop/code/wanju/RULES.md) 和上文第 3.3 节。
+参见 [RULES.md](file:///Users/wangchanglong/Desktop/code/wanju/RULES.md) 和上文第 3.4 节。
 
 ### 添加新 Agent 节点类型
 
 1. 创建 `server/src/domain/workflow/executor/<name>.executor.ts`
 2. 实现 `INodeExecutor` 接口
-3. 在 `executor/index.ts` 中注册
+3. 在 `executor/index.ts` 的 `createDefaultRegistry()` 中注册
 4. 前端添加节点元数据和属性面板
+
+### 添加新运行时类型
+
+1. 在 `blueprint/model/blueprint.model.ts` 中添加 `RuntimeType` 和对应配置接口
+2. 创建 `ai/runtime/<name>.runtime.ts`，实现 `IAgentRuntime` 接口
+3. 在 `RuntimeFactory.create()` 中注册
+4. 前端 `BlueprintEditor` 中添加配置表单
 
 ### 切换 LLM 模型
 

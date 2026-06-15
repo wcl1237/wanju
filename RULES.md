@@ -80,6 +80,9 @@ features/<feature>/
 | `@Inject('action:create_ticket')` | 创建工单 Action |
 | `@Inject('action:search_knowledge')` | 知识检索 Action |
 | `@Inject('action:save_customer_info')` | 保存客户信息 Action |
+| `@Inject() actionRegistry: ActionRegistry` | Action 注册中心（推荐，替代单独注入） |
+| `@Inject() runtimeFactory: RuntimeFactory` | 运行时工厂 |
+| `@Inject() blueprintService: BlueprintService` | 蓝图服务 |
 
 ---
 
@@ -106,6 +109,22 @@ repo: Repository<WorkflowEntity>;
 ---
 
 ## 4. 工作流节点开发规范
+
+### 节点类型数 (13 种)
+
+- **start** — 开始节点（工作流入口，接收用户消息）
+- **trigger** — 触发器节点（已废弃，兼容旧数据）
+- **extract** — 参数提取
+- **condition** — 条件分支（支持 `maxRetries` 防无限循环）
+- **reply** — 固定消息回复
+- **llm_reply** — AI 生成回复（支持 `resultField` 结论提取）
+- **knowledge** — 知识库检索
+- **ticket** — 工单创建
+- **http** — HTTP 请求
+- **agent** — 单 Agent
+- **agent_team** — Agent Teams
+- **master_sub_agent** — Master-Sub Agent
+- **end** — 结束节点
 
 ### 添加新节点类型
 
@@ -144,12 +163,35 @@ interface INodeExecutor {
 
 ```typescript
 // ✅ 正确
-import { stepEvent, contentEvent, llmEvent } from '../model/sse-events';
+import { stepEvent, contentEvent, llmEvent, contentChunkEvent } from '../model/sse-events';
 yield stepEvent({ stepIndex: 0, nodeId: node.id, ... });
+
+// ✅ 流式输出使用 contentChunkEvent
+yield contentChunkEvent(chunk);  // 逐 token 追加到当前气泡
+
+// ✅ 完整内容使用 contentEvent
+yield contentEvent(fullText);    // 独立气泡
 
 // ❌ 错误
 yield `data: ${JSON.stringify({ type: 'workflow_step', ... })}\n\n`;
 ```
+
+### 事件类型列表
+
+| 事件类型 | 说明 | 构建函数 |
+|----------|------|----------|
+| `workflow_start` | 工作流开始执行 | `sseEvent()` |
+| `workflow_end` | 工作流执行结束 | `sseEvent()` |
+| `workflow_step` | 工作流步骤完成 | `stepEvent()` |
+| `workflow_llm` | 工作流 LLM 调用开始/结束 | `llmEvent()` |
+| `content` | 完整内容（独立气泡） | `contentEvent()` |
+| `content_chunk` | 流式 token（追加到当前气泡） | `contentChunkEvent()` |
+| `tool_start` | 工具调用开始 | `toolStartEvent()` |
+| `tool_result` | 工具调用结果 | `toolResultEvent()` |
+| `workflow_match` | 工作流匹配成功 | `sseEvent()` |
+| `skill_match` | 技能匹配成功 | `sseEvent()` |
+| `thinking_end` | 一轮思考完成 | `sseEvent()` |
+| `error` | 错误 | `sseEvent()` |
 
 ---
 
@@ -243,3 +285,22 @@ data: [DONE]\n\n
 - ❌ 使用 `any` 类型（在 `types.ts` 中定义具体类型）
 - ❌ 跨 feature 直接导入组件（共享组件放 `shared/`）
 - ❌ 在 localStorage 中存储 JWT token
+- ❌ 在多个文件中重复注入 Action（使用 `ActionRegistry` 集中管理）
+- ❌ 直接在运行时中硬编码 Action 列表（通过 Blueprint config 配置）
+
+---
+
+## 10. Blueprint / Runtime 开发规范
+
+### 添加新运行时类型
+
+1. 在 `blueprint/model/blueprint.model.ts` 中添加 `RuntimeType` 和对应的 `RuntimeConfig` 接口
+2. 创建 `ai/runtime/<name>.runtime.ts`，实现 `IAgentRuntime` 接口
+3. 在 `RuntimeFactory.create()` 中注册新类型
+4. 前端 `BlueprintEditor` 中添加对应的配置表单
+
+### 规则
+
+- **Runtime 无状态** — 所有状态通过 `RuntimeContext` 传递
+- **Blueprint 不可变** — 运行时不修改 Blueprint，只读取 `config`
+- **对话隔离** — 对话必须按 `blueprintId` 隔离，禁止跨蓝图共享对话
