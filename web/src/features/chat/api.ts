@@ -114,3 +114,12 @@ export function sendMessage(
 
   return () => abortController.abort();
 }
+
+/** 查询工作流执行状态 */
+export async function getWorkflowStatus(
+  conversationId: string
+): Promise<{ running: boolean; events: any[] }> {
+  const res = await authFetch(apiUrl(`/chat/conversations/${conversationId}/wf-status`));
+  const data = await res.json();
+  return data.data;
+}

@@ -90,10 +90,12 @@ export class ChatAppService {
     return { traceSteps, aiContext, stream };
   }
 
-  async saveAssistantMessage(conversationId: string, content: string): Promise<void> {
+  async saveAssistantMessage(conversationId: string, content: string): Promise<string | null> {
     if (content) {
-      await this.memoryManager.addMessage(conversationId, 'assistant', content);
+      const msg = await this.memoryManager.addMessage(conversationId, 'assistant', content);
+      return msg.id;
     }
+    return null;
   }
 
   async saveTraceSteps(conversationId: string, traceSteps: any[]): Promise<void> {

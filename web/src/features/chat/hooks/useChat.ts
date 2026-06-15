@@ -6,6 +6,7 @@ import {
   deleteConversation as apiDeleteConversation,
   getHistory,
   sendMessage,
+  getWorkflowStatus,
 } from '../api';
 
 /**
@@ -24,6 +25,7 @@ export function useChat(
   const [hasMore, setHasMore] = useState(false);
   const [historyPage, setHistoryPage] = useState(2);
   const abortRef = useRef<(() => void) | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 加载对话列表
   const loadConversations = useCallback(async () => {
@@ -41,18 +43,93 @@ export function useChat(
   useEffect(() => {
     if (conversationId) {
       setHistoryPage(2);
-      getHistory(conversationId, 1, 20).then(data => {
+      getHistory(conversationId, 1, 40).then(data => {
         setMessages(data.messages);
         setHasMore(data.hasMore);
       }).catch(err => {
         console.error('加载消息失败:', err);
         setMessages([]);
       });
+
+      // 检查是否有正在执行的工作流
+      checkWorkflowStatus(conversationId);
     } else {
       setMessages([]);
       setHasMore(false);
     }
+
+    return () => {
+      // 切换对话时清除轮询
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
   }, [conversationId]);
+
+  // 检查工作流执行状态（页面回来时恢复）
+  const checkWorkflowStatus = useCallback(async (convId: string) => {
+    try {
+      const status = await getWorkflowStatus(convId);
+      if (status.running) {
+        setIsLoading(true);
+        // 处理已缓存的事件
+        processBufferedEvents(status.events, convId);
+        // 开始轮询
+        startPolling(convId);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // 处理 Redis 缓存的事件
+  const processBufferedEvents = useCallback((events: any[], convId: string) => {
+    for (const raw of events) {
+      let event: any;
+      try { event = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { continue; }
+
+      if (event.type === 'content' && event.content) {
+        // 每个 content 创建独立气泡 — 但因为是从DB恢复的，刷新历史即可
+      } else if (event.type === 'workflow_complete') {
+        setIsLoading(false);
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      }
+    }
+    // 刷新消息列表获取最新数据
+    getHistory(convId, 1, 40).then(data => {
+      setMessages(data.messages);
+      setHasMore(data.hasMore);
+    }).catch(() => {});
+  }, []);
+
+  // 轮询工作流状态
+  const startPolling = useCallback((convId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getWorkflowStatus(convId);
+        // 有新事件时刷新消息列表
+        if (status.events.length > 0) {
+          getHistory(convId, 1, 40).then(data => {
+            setMessages(data.messages);
+            setHasMore(data.hasMore);
+          }).catch(() => {});
+        }
+        if (!status.running) {
+          setIsLoading(false);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        }
+      } catch {
+        // 轮询失败不阻塞
+      }
+    }, 2000);
+  }, []);
 
   // 初始化加载对话列表 + 自动选中最近对话
   useEffect(() => {
@@ -115,10 +192,9 @@ export function useChat(
     setIsLoading(true);
     setToolStatuses([]);
 
-    // 准备 AI 回复占位
-    let aiContent = '';
-    const aiMsgId = `ai-${Date.now()}`;
-    const traceSteps: ToolStatus[] = []; // 本轮所有轨迹
+    // 跟踪当前 content 对应的气泡 ID
+    let currentBubbleId = '';
+    const traceSteps: ToolStatus[] = [];
 
     const abort = sendMessage(
       convId,
@@ -135,27 +211,30 @@ export function useChat(
           traceSteps.push({ type: 'skill_match', skills: (event as any).skills || [] });
           setToolStatuses([...traceSteps]);
         } else if (event.type === 'content') {
-          aiContent += event.content || '';
-          setMessages(prev => {
-            const existing = prev.find(m => m.id === aiMsgId);
-            if (existing) {
-              return prev.map(m =>
-                m.id === aiMsgId ? { ...m, content: aiContent, traceSteps: [...traceSteps] } : m
-              );
-            } else {
-              return [
-                ...prev,
-                {
-                  id: aiMsgId,
-                  conversationId: convId!,
-                  role: 'assistant' as const,
-                  content: aiContent,
-                  createdAt: new Date().toISOString(),
-                  traceSteps: [...traceSteps],
-                },
-              ];
-            }
-          });
+          // 每个 content 事件创建一个新的独立气泡
+          currentBubbleId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          setMessages(prev => [
+            ...prev,
+            {
+              id: currentBubbleId,
+              conversationId: convId!,
+              role: 'assistant' as const,
+              content: event.content || '',
+              createdAt: new Date().toISOString(),
+              traceSteps: [...traceSteps],
+            },
+          ]);
+        } else if (event.type === 'content_saved') {
+          // 后端已存 DB，更新气泡 ID 为真实 DB ID
+          const realId = (event as any).messageId;
+          if (realId && currentBubbleId) {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === currentBubbleId ? { ...m, id: realId } : m
+              )
+            );
+            currentBubbleId = realId;
+          }
         } else if (event.type === 'thinking_end') {
           traceSteps.push({
             type: 'thinking_end',
@@ -167,11 +246,12 @@ export function useChat(
         } else if (event.type === 'tool_start') {
           traceSteps.push({ type: 'tool_start', tool: event.tool!, args: event.args });
           setToolStatuses([...traceSteps]);
+          // 更新最后一个 assistant 消息的 traceSteps
           setMessages(prev => {
-            const existing = prev.find(m => m.id === aiMsgId);
-            if (existing) {
+            const lastAi = [...prev].reverse().find(m => m.role === 'assistant');
+            if (lastAi) {
               return prev.map(m =>
-                m.id === aiMsgId ? { ...m, traceSteps: [...traceSteps] } : m
+                m.id === lastAi.id ? { ...m, traceSteps: [...traceSteps] } : m
               );
             }
             return prev;
@@ -184,11 +264,15 @@ export function useChat(
             timeMs: (event as any).timeMs,
           });
           setToolStatuses([...traceSteps]);
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === aiMsgId ? { ...m, traceSteps: [...traceSteps] } : m
-            )
-          );
+          setMessages(prev => {
+            const lastAi = [...prev].reverse().find(m => m.role === 'assistant');
+            if (lastAi) {
+              return prev.map(m =>
+                m.id === lastAi.id ? { ...m, traceSteps: [...traceSteps] } : m
+              );
+            }
+            return prev;
+          });
         } else if (event.type === 'workflow_match') {
           traceSteps.push({
             type: 'workflow_match',
@@ -222,11 +306,15 @@ export function useChat(
             timeMs: (event as any).timeMs,
           });
           setToolStatuses([...traceSteps]);
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === aiMsgId ? { ...m, traceSteps: [...traceSteps] } : m
-            )
-          );
+          setMessages(prev => {
+            const lastAi = [...prev].reverse().find(m => m.role === 'assistant');
+            if (lastAi) {
+              return prev.map(m =>
+                m.id === lastAi.id ? { ...m, traceSteps: [...traceSteps] } : m
+              );
+            }
+            return prev;
+          });
         } else if (event.type === 'workflow_llm') {
           traceSteps.push({
             type: 'workflow_llm',
@@ -237,11 +325,15 @@ export function useChat(
             timeMs: (event as any).timeMs,
           });
           setToolStatuses([...traceSteps]);
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === aiMsgId ? { ...m, traceSteps: [...traceSteps] } : m
-            )
-          );
+          setMessages(prev => {
+            const lastAi = [...prev].reverse().find(m => m.role === 'assistant');
+            if (lastAi) {
+              return prev.map(m =>
+                m.id === lastAi.id ? { ...m, traceSteps: [...traceSteps] } : m
+              );
+            }
+            return prev;
+          });
         } else if (event.type === 'workflow_output') {
           traceSteps.push({
             type: 'workflow_output',
@@ -249,11 +341,15 @@ export function useChat(
             mode: (event as any).mode,
           });
           setToolStatuses([...traceSteps]);
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === aiMsgId ? { ...m, traceSteps: [...traceSteps] } : m
-            )
-          );
+          setMessages(prev => {
+            const lastAi = [...prev].reverse().find(m => m.role === 'assistant');
+            if (lastAi) {
+              return prev.map(m =>
+                m.id === lastAi.id ? { ...m, traceSteps: [...traceSteps] } : m
+              );
+            }
+            return prev;
+          });
         } else if (event.type === 'workflow_end') {
           traceSteps.push({
             type: 'workflow_end',
@@ -263,14 +359,14 @@ export function useChat(
           });
           setToolStatuses([...traceSteps]);
         } else if (event.type === 'error') {
-          aiContent = event.content || '抱歉，发生了错误。';
+          const errorId = `err-${Date.now()}`;
           setMessages(prev => [
-            ...prev.filter(m => m.id !== aiMsgId),
+            ...prev,
             {
-              id: aiMsgId,
+              id: errorId,
               conversationId: convId!,
               role: 'assistant' as const,
-              content: aiContent,
+              content: event.content || '抱歉，发生了错误。',
               createdAt: new Date().toISOString(),
             },
           ]);
@@ -282,13 +378,13 @@ export function useChat(
         loadConversations();
       },
       () => {
-        // 出错
-        setIsLoading(false);
+        // 出错 — 开始轮询看后台是否还在执行
+        if (convId) startPolling(convId);
       }
     );
 
     abortRef.current = abort;
-  }, [conversationId, newConversation, loadConversations]);
+  }, [conversationId, newConversation, loadConversations, startPolling]);
 
   // 加载更多历史消息
   const loadMore = useCallback(async () => {

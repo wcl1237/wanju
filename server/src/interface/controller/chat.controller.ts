@@ -1,7 +1,12 @@
 import { Controller, Get, Post, Del, Inject, Param, Body, Query } from '@midwayjs/core';
 import { Context } from '@midwayjs/koa';
+import { RedisService } from '@midwayjs/redis';
 import { ChatAppService } from '../../application/chat.app-service';
 import { ChatRequest } from '../../domain/ai/model/ai.model';
+
+/** 工作流执行状态缓存 key */
+const WF_STATUS_KEY = (id: string) => `wf:status:${id}`;
+const WF_EVENTS_KEY = (id: string) => `wf:events:${id}`;
 
 @Controller('/api/chat')
 export class ChatController {
@@ -10,6 +15,9 @@ export class ChatController {
 
   @Inject()
   chatAppService: ChatAppService;
+
+  @Inject()
+  redisService: RedisService;
 
   @Post('/conversations')
   async createConversation(@Body() body?: { blueprintId?: string }) {
@@ -45,6 +53,28 @@ export class ChatController {
   }
 
   /**
+   * 查询工作流执行状态
+   */
+  @Get('/conversations/:id/wf-status')
+  async getWorkflowStatus(@Param('id') id: string) {
+    const status = await this.redisService.get(WF_STATUS_KEY(id));
+    if (!status) {
+      return { success: true, data: { running: false, events: [] } };
+    }
+    // 获取自上次查询以来新增的事件
+    const events = await this.redisService.lrange(WF_EVENTS_KEY(id), 0, -1);
+    // 消费后清空事件队列
+    await this.redisService.del(WF_EVENTS_KEY(id));
+    return {
+      success: true,
+      data: {
+        running: status === 'running',
+        events: events.map(e => { try { return JSON.parse(e); } catch { return null; } }).filter(Boolean),
+      },
+    };
+  }
+
+  /**
    * 发送消息（SSE 流式响应）— 使用 ChatAppService 编排
    */
   @Post('/conversations/:id/messages')
@@ -70,25 +100,70 @@ export class ChatController {
       sseStream.write(`data: ${JSON.stringify(step)}\n\n`);
     }
 
-    // 3. 异步生成 AI 回复
+    // 3. 标记工作流执行中
+    await this.redisService.set(WF_STATUS_KEY(id), 'running', 'EX', 600);
+    await this.redisService.del(WF_EVENTS_KEY(id));
+
+    // 追踪 SSE 连接是否存活
+    let sseAlive = true;
+    sseStream.on('close', () => { sseAlive = false; });
+    sseStream.on('error', () => { sseAlive = false; });
+
+    // 安全写入 SSE — 如果连接断开就缓存到 Redis
+    const safeSend = (data: string) => {
+      if (sseAlive) {
+        try { sseStream.write(data); } catch { sseAlive = false; }
+      }
+      // 同时缓存到 Redis（供断线重连查询）
+      this.redisService.rpush(WF_EVENTS_KEY(id), data.replace(/^data: /, '').replace(/\n\n$/, '')).catch(() => {});
+      this.redisService.expire(WF_EVENTS_KEY(id), 600).catch(() => {});
+    };
+
+    // 4. 后台执行 — 即使 SSE 断开也继续
     (async () => {
-      let fullContent = '';
       try {
         for await (const chunk of stream) {
-          sseStream.write(chunk);
+          // 解析事件
+          const dataMatch = chunk.match(/^data: (.+)$/m);
+          if (!dataMatch) {
+            safeSend(chunk);
+            continue;
+          }
+
+          let data: any;
+          try { data = JSON.parse(dataMatch[1]); } catch { safeSend(chunk); continue; }
+
+          // content 事件 → 实时存储为独立 assistant 消息
+          if (data.type === 'content' && data.content) {
+            const msgId = await this.chatAppService.saveAssistantMessage(id, data.content);
+            // 先发原始 content 事件
+            safeSend(chunk);
+            // 再发 content_saved 事件告知前端真实消息 ID
+            if (msgId) {
+              safeSend(`data: ${JSON.stringify({ type: 'content_saved', messageId: msgId, content: data.content })}\n\n`);
+            }
+          } else {
+            safeSend(chunk);
+          }
+
+          // 收集 trace
           this.collectTraceStep(chunk, traceSteps);
-          const content = this.extractContent(chunk);
-          if (content) fullContent += content;
         }
 
-        await this.chatAppService.saveAssistantMessage(id, fullContent);
+        // 保存 trace（不再保存 fullContent，已逐条存储）
         await this.chatAppService.saveTraceSteps(id, traceSteps);
         await this.chatAppService.postProcess(id, userId);
       } catch (error) {
-        sseStream.write(`data: ${JSON.stringify({ type: 'error', content: '抱歉，AI 服务暂时不可用，请稍后重试。' })}\n\n`);
-        sseStream.write('data: [DONE]\n\n');
+        const errEvent = `data: ${JSON.stringify({ type: 'error', content: '抱歉，AI 服务暂时不可用，请稍后重试。' })}\n\n`;
+        safeSend(errEvent);
       } finally {
-        sseStream.end();
+        // 标记执行完成
+        await this.redisService.set(WF_STATUS_KEY(id), 'done', 'EX', 60);
+        // 发送完成事件
+        safeSend(`data: ${JSON.stringify({ type: 'workflow_complete' })}\n\n`);
+        if (sseAlive) {
+          try { sseStream.end(); } catch { /* ignore */ }
+        }
       }
     })();
   }
@@ -100,18 +175,6 @@ export class ChatController {
   }
 
   // ==================== 工具方法 ====================
-
-  /** 从 SSE 事件中提取 content */
-  private extractContent(chunk: string): string | null {
-    try {
-      const dataMatch = chunk.match(/^data: (.+)$/m);
-      if (dataMatch) {
-        const data = JSON.parse(dataMatch[1]);
-        if (data.type === 'content') return data.content;
-      }
-    } catch { /* ignore */ }
-    return null;
-  }
 
   /** 收集 trace 事件 */
   private collectTraceStep(chunk: string, traceSteps: any[]): void {
