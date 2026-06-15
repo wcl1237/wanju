@@ -207,7 +207,7 @@ const AgentPool: React.FC = () => {
                   );
                 })}
               </div>
-              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>勾选后 Agent 在工作流中可调用这些工具</div>
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>Agent 自身能力定义 — Blueprint 可继承或覆盖这些配置</div>
             </div>
 
             {/* 可触发技能 */}
