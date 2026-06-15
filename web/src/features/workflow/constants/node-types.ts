@@ -11,7 +11,7 @@ export interface NodeTypeMeta {
 
 export const NODE_TYPES_META: Record<string, NodeTypeMeta> = {
   start: { icon: '▶️', label: '开始', color: '#22c55e', desc: '工作流入口，接收用户消息' },
-  trigger: { icon: '⚡', label: '触发器', color: '#10b981', desc: '意图匹配触发（兼容旧工作流）' },
+  trigger: { icon: '⚡', label: '触发器(旧)', color: '#94a3b8', desc: '已废弃，请使用开始节点' },
   end: { icon: '🏁', label: '结束', color: '#b2a9a9ff', desc: '工作流终止节点' },
   reply: { icon: '💬', label: '消息回复', color: '#3b82f6', desc: '发送固定文本回复' },
   llm_reply: { icon: '🤖', label: 'AI 生成', color: '#a855f7', desc: 'LLM 生成动态回复' },
