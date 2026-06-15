@@ -140,8 +140,9 @@ ${workflowList}
     workflow: Workflow,
     userMessage: string,
     actions: Map<string, Action>,
-    context: ActionContext
+    context: ActionContext,
+    abortSignal?: { aborted: boolean }
   ): AsyncGenerator<string> {
-    return this.graphEngine.executeWorkflow(workflow, userMessage, actions, context);
+    return this.graphEngine.executeWorkflow(workflow, userMessage, actions, context, abortSignal);
   }
 }

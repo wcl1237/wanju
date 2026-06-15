@@ -1,8 +1,8 @@
 import { INodeExecutor, ExecutorDeps, NodeExecutionResult } from './node-executor.interface';
 import { FlowNode, ExecContext } from '../model/workflow.model';
-import { stepEvent, llmEvent, contentEvent } from '../model/sse-events';
+import { stepEvent, llmEvent, contentChunkEvent } from '../model/sse-events';
 
-/** AI 生成回复节点 — 使用 LLM 根据上下文生成动态回复 */
+/** AI 生成回复节点 — 流式输出 */
 export class LlmReplyExecutor implements INodeExecutor {
   readonly type = 'llm_reply';
 
@@ -15,32 +15,7 @@ export class LlmReplyExecutor implements INodeExecutor {
 
     yield llmEvent({ stage: 'start', nodeId: node.id, purpose: 'AI 生成回复', input: ctx.userMessage.slice(0, 200) });
 
-    const replyContent = await this.generateReply(node.data, ctx, deps);
-
-    yield llmEvent({ stage: 'end', nodeId: node.id, purpose: 'AI 生成回复', timeMs: Date.now() - stepStart });
-
-    yield contentEvent(replyContent);
-    ctx.lastOutput = replyContent;
-    ctx.contentYielded = true;
-
-    yield stepEvent({
-      stepIndex: deps.visitedCount - 1,
-      nodeId: node.id,
-      stepType: 'llm_reply',
-      stepName: node.data.label || 'AI 生成',
-      result: replyContent.slice(0, 500),
-      timeMs: Date.now() - stepStart,
-    });
-
-    return { output: replyContent, contentYielded: true };
-  }
-
-  private async generateReply(
-    data: FlowNode['data'],
-    ctx: ExecContext,
-    deps: ExecutorDeps,
-  ): Promise<string> {
-    const customPrompt = data.prompt || '根据上下文生成友好的回复';
+    const customPrompt = node.data.prompt || '根据上下文生成友好的回复';
     const resultsSummary = [...ctx.results.entries()]
       .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v)}`)
       .join('\n');
@@ -54,9 +29,34 @@ ${resultsSummary}
 
 请生成面向用户的友好回复。不要暴露内部实现。`;
 
+    let fullContent = '';
     try {
-      const content = await deps.llmClient.complete(prompt, { temperature: 0.7, maxTokens: 4000 });
-      return content || '工作流执行完成。';
-    } catch { return '工作流已执行完成。'; }
+      const stream = deps.llmClient.completeStream(prompt, { temperature: 0.7, maxTokens: 4000 });
+      for await (const chunk of stream) {
+        if (deps.abortSignal?.aborted) break;
+        fullContent += chunk;
+        yield contentChunkEvent(chunk);
+      }
+    } catch {
+      if (!fullContent) fullContent = '工作流已执行完成。';
+    }
+
+    if (!fullContent) fullContent = '工作流执行完成。';
+
+    yield llmEvent({ stage: 'end', nodeId: node.id, purpose: 'AI 生成回复', timeMs: Date.now() - stepStart });
+
+    ctx.lastOutput = fullContent;
+    ctx.contentYielded = true;
+
+    yield stepEvent({
+      stepIndex: deps.visitedCount - 1,
+      nodeId: node.id,
+      stepType: 'llm_reply',
+      stepName: node.data.label || 'AI 生成',
+      result: fullContent.slice(0, 500),
+      timeMs: Date.now() - stepStart,
+    });
+
+    return { output: fullContent, contentYielded: true };
   }
 }

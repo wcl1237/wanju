@@ -98,6 +98,11 @@ export interface ErrorEvent {
   content: string;
 }
 
+export interface ContentChunkEvent {
+  type: 'content_chunk';
+  chunk: string;
+}
+
 export type SSEEvent =
   | WorkflowStartEvent
   | WorkflowEndEvent
@@ -110,7 +115,8 @@ export type SSEEvent =
   | WorkflowOutputEvent
   | SkillMatchEvent
   | ThinkingEndEvent
-  | ErrorEvent;
+  | ErrorEvent
+  | ContentChunkEvent;
 
 // ==================== 事件构建工具 ====================
 
@@ -129,9 +135,14 @@ export function llmEvent(opts: Omit<WorkflowLLMEvent, 'type'>): string {
   return sseEvent({ type: 'workflow_llm', ...opts });
 }
 
-/** 构建 content 事件 */
+/** 构建 content 事件 — 完整内容（一个独立气泡） */
 export function contentEvent(content: string): string {
   return sseEvent({ type: 'content', content });
+}
+
+/** 构建 content_chunk 事件 — 流式 token（追加到当前气泡） */
+export function contentChunkEvent(chunk: string): string {
+  return sseEvent({ type: 'content_chunk', chunk });
 }
 
 /** 构建 tool_start 事件 */

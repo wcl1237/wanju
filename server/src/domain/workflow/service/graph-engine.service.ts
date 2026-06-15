@@ -45,7 +45,8 @@ export class GraphEngineService {
     workflow: Workflow,
     userMessage: string,
     actions: Map<string, Action>,
-    context: ActionContext
+    context: ActionContext,
+    abortSignal?: { aborted: boolean }
   ): AsyncGenerator<string> {
     const startTime = Date.now();
     const { nodes, edges } = workflow.graph;
@@ -83,7 +84,7 @@ export class GraphEngineService {
     // 4. 递归遍历
     const visited = new Set<string>();
     yield* this.traverseNode(
-      entryNode.id, adjacency, nodes, actions, context, execCtx, visited
+      entryNode.id, adjacency, nodes, actions, context, execCtx, visited, abortSignal
     );
 
     const totalMs = Date.now() - startTime;
@@ -108,8 +109,15 @@ export class GraphEngineService {
     actions: Map<string, Action>,
     context: ActionContext,
     execCtx: ExecContext,
-    visited: Set<string>
+    visited: Set<string>,
+    abortSignal?: { aborted: boolean }
   ): AsyncGenerator<string> {
+    // 检查终止信号
+    if (abortSignal?.aborted) {
+      console.log(`[Workflow] ⛔ 执行已被用户终止`);
+      return;
+    }
+
     // 全局步数限制，防止无限循环（不限制节点重复执行）
     execCtx._stepCount = (execCtx._stepCount || 0) + 1;
     if (execCtx._stepCount > 100) {
@@ -144,6 +152,7 @@ export class GraphEngineService {
       actions,
       actionContext: context,
       visitedCount: execCtx._stepCount,
+      abortSignal,
     };
 
     // 执行节点
@@ -247,7 +256,7 @@ export class GraphEngineService {
     }
 
     for (const nextId of nextNodeIds) {
-      yield* this.traverseNode(nextId, adjacency, nodes, actions, context, execCtx, visited);
+      yield* this.traverseNode(nextId, adjacency, nodes, actions, context, execCtx, visited, abortSignal);
     }
   }
 

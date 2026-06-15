@@ -74,6 +74,7 @@ function ChatPage() {
     newConversation,
     deleteConversation,
     send,
+    stop,
     loadMore,
   } = useChat(conversationId, onNavigate, blueprintId);
 
@@ -91,6 +92,7 @@ function ChatPage() {
         messages={messages}
         isLoading={isLoading}
         onSend={send}
+        onStop={stop}
         conversationId={activeConversationId}
         hasMore={hasMore}
         onLoadMore={loadMore}

@@ -7,6 +7,7 @@ import {
   getHistory,
   sendMessage,
   getWorkflowStatus,
+  stopGeneration as apiStopGeneration,
 } from '../api';
 
 /**
@@ -194,6 +195,7 @@ export function useChat(
 
     // 跟踪当前 content 对应的气泡 ID
     let currentBubbleId = '';
+    let streamingBubbleId = ''; // 流式气泡 ID
     const traceSteps: ToolStatus[] = [];
 
     const abort = sendMessage(
@@ -235,6 +237,44 @@ export function useChat(
             );
             currentBubbleId = realId;
           }
+        } else if (event.type === 'content_stream_start') {
+          // 流式开始 — 创建新的空气泡
+          streamingBubbleId = `stream-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          setMessages(prev => [
+            ...prev,
+            {
+              id: streamingBubbleId,
+              conversationId: convId!,
+              role: 'assistant' as const,
+              content: '',
+              createdAt: new Date().toISOString(),
+              traceSteps: [...traceSteps],
+            },
+          ]);
+        } else if (event.type === 'content_chunk') {
+          // 流式 chunk — 追加到当前流式气泡
+          const chunk = (event as any).chunk || '';
+          if (streamingBubbleId) {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === streamingBubbleId
+                  ? { ...m, content: m.content + chunk }
+                  : m
+              )
+            );
+          }
+        } else if (event.type === 'content_stream_end') {
+          // 流式结束 — 更新气泡 ID 为 DB 真实 ID
+          const realId = (event as any).messageId;
+          if (realId && streamingBubbleId) {
+            setMessages(prev =>
+              prev.map(m =>
+                m.id === streamingBubbleId ? { ...m, id: realId } : m
+              )
+            );
+            currentBubbleId = realId;
+          }
+          streamingBubbleId = '';
         } else if (event.type === 'thinking_end') {
           traceSteps.push({
             type: 'thinking_end',
@@ -386,6 +426,28 @@ export function useChat(
     abortRef.current = abort;
   }, [conversationId, newConversation, loadConversations, startPolling]);
 
+  // 停止生成
+  const stop = useCallback(async () => {
+    // 1. 终止 SSE 连接
+    if (abortRef.current) {
+      abortRef.current();
+      abortRef.current = null;
+    }
+    // 2. 通知后端停止
+    const convId = conversationId;
+    if (convId) {
+      try {
+        await apiStopGeneration(convId);
+      } catch { /* ignore */ }
+    }
+    // 3. 清除轮询
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setIsLoading(false);
+  }, [conversationId]);
+
   // 加载更多历史消息
   const loadMore = useCallback(async () => {
     if (!conversationId || !hasMore) return;
@@ -409,6 +471,7 @@ export function useChat(
     newConversation,
     deleteConversation,
     send,
+    stop,
     loadMore,
   };
 }

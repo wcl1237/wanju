@@ -175,4 +175,78 @@ export class OpenAICompatibleClient implements ILLMClient {
     // 清理 think 标签
     return result.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
   }
+
+  /**
+   * 流式文本补全（逐 token 输出）
+   */
+  async *completeStream(
+    prompt: string,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+    }
+  ): AsyncGenerator<string> {
+    const body: any = {
+      model: this.aiConfig.model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+    };
+    if (options?.temperature !== undefined) body.temperature = options.temperature;
+    if (options?.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+
+    const response = await fetch(`${this.aiConfig.apiBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.aiConfig.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI API stream error: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return;
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let inThink = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+          if (delta?.content) {
+            let content = delta.content;
+            // 过滤 think 标签
+            if (content.includes('<think>')) inThink = true;
+            if (inThink) {
+              if (content.includes('</think>')) {
+                content = content.split('</think>').pop() || '';
+                inThink = false;
+              } else {
+                continue;
+              }
+            }
+            if (content) yield content;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
 }

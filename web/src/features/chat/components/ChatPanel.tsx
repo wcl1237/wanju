@@ -8,6 +8,7 @@ interface ChatPanelProps {
   messages: Message[];
   isLoading: boolean;
   onSend: (message: string) => void;
+  onStop?: () => void;
   conversationId?: string | null;
   hasMore?: boolean;
   onLoadMore?: () => void;
@@ -86,7 +87,7 @@ const ThinkingIndicator: React.FC<{ toolStatuses?: ToolStatus[] }> = ({ toolStat
   );
 };
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSend, conversationId, hasMore, onLoadMore, toolStatuses }) => {
+const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSend, onStop, conversationId, hasMore, onLoadMore, toolStatuses }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -178,7 +179,36 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSend, conv
               <ChatMessage key={msg.id} message={msg} />
             ))}
             {isLoading && (
-              <ThinkingIndicator toolStatuses={toolStatuses} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ThinkingIndicator toolStatuses={toolStatuses} />
+                {onStop && (
+                  <button
+                    onClick={onStop}
+                    style={{
+                      padding: '6px 14px',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: 8,
+                      color: '#ef4444',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                      e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                      e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                    }}
+                  >
+                    ⏹ 停止
+                  </button>
+                )}
+              </div>
             )}
             <div ref={messagesEndRef} />
           </div>

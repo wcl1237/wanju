@@ -36,4 +36,15 @@ export interface ILLMClient {
       maxTokens?: number;
     }
   ): Promise<string>;
+
+  /**
+   * 流式文本补全（逐 token 输出）
+   */
+  completeStream(
+    prompt: string,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+    }
+  ): AsyncGenerator<string>;
 }

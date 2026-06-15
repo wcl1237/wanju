@@ -24,6 +24,8 @@ export interface ExecutorDeps {
   actionContext: ActionContext;
   /** 已访问节点数（用于 stepIndex） */
   visitedCount: number;
+  /** 终止信号 — 用于用户手动停止 */
+  abortSignal?: { aborted: boolean };
 }
 
 /**

@@ -123,3 +123,8 @@ export async function getWorkflowStatus(
   const data = await res.json();
   return data.data;
 }
+
+/** 停止对话/工作流执行 */
+export async function stopGeneration(conversationId: string): Promise<void> {
+  await authFetch(apiUrl(`/chat/conversations/${conversationId}/stop`), { method: 'POST' });
+}

@@ -36,7 +36,7 @@ export interface TraceStepInMessage {
 }
 
 export interface SSEEvent {
-  type: 'content' | 'content_saved' | 'tool_start' | 'tool_result' | 'thinking_end' | 'skill_match' | 'memory_init' | 'message_save' | 'memory_load' | 'workflow_match' | 'workflow_start' | 'workflow_step' | 'workflow_end' | 'workflow_llm' | 'workflow_output' | 'workflow_complete' | 'error';
+  type: 'content' | 'content_chunk' | 'content_stream_start' | 'content_stream_end' | 'content_saved' | 'tool_start' | 'tool_result' | 'thinking_end' | 'skill_match' | 'memory_init' | 'message_save' | 'memory_load' | 'workflow_match' | 'workflow_start' | 'workflow_step' | 'workflow_end' | 'workflow_llm' | 'workflow_output' | 'workflow_complete' | 'error';
   content?: string;
   tool?: string;
   args?: any;
