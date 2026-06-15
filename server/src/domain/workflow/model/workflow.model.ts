@@ -198,4 +198,6 @@ export interface ExecContext {
   finalReplyContent?: string;
   /** 全局执行步数计数器（防止无限循环） */
   _stepCount?: number;
+  /** 整个工作流中是否已向用户发送过 content（不随节点重置） */
+  _anySent?: boolean;
 }

@@ -42,7 +42,7 @@ export class LlmReplyExecutor implements INodeExecutor {
   ): Promise<string> {
     const customPrompt = data.prompt || '根据上下文生成友好的回复';
     const resultsSummary = [...ctx.results.entries()]
-      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v)}`)
       .join('\n');
 
     const prompt = `${customPrompt}

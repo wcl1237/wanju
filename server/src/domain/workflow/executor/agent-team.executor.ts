@@ -37,7 +37,7 @@ export class AgentTeamExecutor implements INodeExecutor {
     const blackboard = new Map<string, string>();
 
     const resultsSummary = [...ctx.results.entries()]
-      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v)}`)
       .join('\n');
 
     // 并行执行所有 Agent

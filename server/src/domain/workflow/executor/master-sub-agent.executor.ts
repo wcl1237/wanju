@@ -33,7 +33,7 @@ export class MasterSubAgentExecutor implements INodeExecutor {
     yield llmEvent({ stage: 'start', nodeId: node.id, purpose: `Master: ${masterAgent.name}`, input: ctx.userMessage.slice(0, 200) });
 
     const resultsSummary = [...ctx.results.entries()]
-      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v)}`)
       .join('\n');
 
     // 构建 call_sub_agent 工具

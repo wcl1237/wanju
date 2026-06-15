@@ -168,6 +168,7 @@ export class GraphEngineService {
       }
       if (result.contentYielded !== undefined) {
         execCtx.contentYielded = result.contentYielded;
+        if (result.contentYielded) execCtx._anySent = true;
       }
 
       // end 节点不再继续遍历
@@ -200,6 +201,7 @@ export class GraphEngineService {
       console.log(`[Workflow] 🔄 透传节点输出: ${nodeId}`);
       yield contentEvent(execCtx.lastOutput);
       execCtx.contentYielded = true;
+      execCtx._anySent = true;
     }
 
     // 节点可配置 responseText — 执行后向对话窗口发送固定反馈
@@ -209,6 +211,7 @@ export class GraphEngineService {
       yield contentEvent(respText);
       execCtx.lastOutput = respText;
       execCtx.contentYielded = true;
+      execCtx._anySent = true;
     }
 
     // 节点可配置 autoAIResponse — 执行后让 AI 根据结果自动生成反馈
@@ -225,6 +228,7 @@ export class GraphEngineService {
           yield contentEvent(aiReply);
           execCtx.lastOutput = aiReply;
           execCtx.contentYielded = true;
+          execCtx._anySent = true;
         }
       } catch (e: any) {
         console.error(`[Workflow] AI 反馈生成失败 (${nodeId}):`, e.message);

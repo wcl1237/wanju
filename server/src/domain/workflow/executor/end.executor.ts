@@ -17,7 +17,9 @@ export class EndExecutor implements INodeExecutor {
     // 优先使用标记为"最终回复"的节点输出
     const finalContent = ctx.finalReplyContent ?? ctx.lastOutput;
 
-    if (finalContent && !ctx.contentYielded) {
+    // 如果整个工作流中从未向用户发送过任何 content，则发送最终内容
+    // 如果之前已有节点透传/反馈过内容，结束节点不再重复发送
+    if (finalContent && !ctx._anySent) {
       let isStructured = false;
       try {
         const parsed = JSON.parse(finalContent);

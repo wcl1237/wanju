@@ -30,7 +30,7 @@ export class AgentExecutor implements INodeExecutor {
     yield llmEvent({ stage: 'start', nodeId: node.id, purpose: `Agent: ${agent.name}`, input: ctx.userMessage.slice(0, 200) });
 
     const resultsSummary = [...ctx.results.entries()]
-      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v).slice(0, 500)}`)
+      .map(([k, v]) => `节点 ${k}: ${JSON.stringify(v)}`)
       .join('\n');
 
     const systemPrompt = `${agent.prompt}
