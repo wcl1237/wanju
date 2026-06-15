@@ -76,7 +76,7 @@ const BlueprintPage: React.FC = () => {
       ) : (
         <div style={s.grid}>
           {blueprints.map(bp => {
-            const meta = RUNTIME_TYPE_META[bp.runtimeType];
+            const meta = RUNTIME_TYPE_META[bp.runtimeType] || { label: bp.runtimeType, icon: '❓', color: '#64748b', desc: '未知类型' };
             const isHovered = hoveredId === bp.id;
             return (
               <div

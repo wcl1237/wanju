@@ -45,7 +45,7 @@ const BlueprintEditor: React.FC = () => {
 
   if (!blueprint) return <div style={s.loading}>加载中...</div>;
 
-  const meta = RUNTIME_TYPE_META[blueprint.runtimeType];
+  const meta = RUNTIME_TYPE_META[blueprint.runtimeType] || { label: blueprint.runtimeType, icon: '❓', color: '#64748b', desc: '未知类型' };
 
   return (
     <div style={s.container}>
