@@ -33,10 +33,12 @@ export class WorkflowController {
 - end: 结束节点（流程终止）
 - reply: 消息回复（固定文本回复），data 字段: { replyText: "回复文本", isFinalReply?: true }
 - llm_reply: AI 生成回复（LLM 动态生成），data 字段: { prompt: "生成提示词", isFinalReply?: true }
-- condition: 条件分支（根据条件走不同路径），data 字段: { conditionField: "判断字段", conditionOp: "contains|equals|not_empty|has_result", conditionValue: "比较值" }
-- extract: 参数提取（从用户消息提取关键信息），data 字段: { params: ["参数名1", "参数名2"], extractPrompt?: "提取指导" }
-- knowledge: 知识检索（搜索知识库），data 字段: { query: "检索查询，留空使用用户消息", topK: 3 }
-- ticket: 创建工单，data 字段: { title: "工单标题", category: "general|refund|complaint|inquiry", ticketPriority: "low|medium|high" }
+- condition: 条件分支（根据条件走不同路径），data 字段: { conditionField: "判断字段", conditionOp: "contains|equals|not_empty|has_result", conditionValue: "比较值", responseText?: "分支结果反馈" }
+- extract: 参数提取（从用户消息提取关键信息），data 字段: { params: ["参数名1", "参数名2"], extractPrompt?: "提取指导", responseText?: "提取完成后的反馈" }
+- knowledge: 知识检索（搜索知识库），data 字段: { query: "检索查询，留空使用用户消息", topK: 3, responseText?: "检索完成后的反馈" }
+- ticket: 创建工单，data 字段: { title: "工单标题", category: "general|refund|complaint|inquiry", ticketPriority: "low|medium|high", responseText?: "工单创建后的反馈" }
+
+注意: 除 reply/llm_reply 外的节点可通过 responseText 字段在执行后向用户发送反馈消息，支持 {{参数名}} 变量。
 
 ## 连线规则
 - 普通节点的 source 锚点 ID 不需要指定

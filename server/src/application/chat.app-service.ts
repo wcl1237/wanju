@@ -104,12 +104,7 @@ export class ChatAppService {
 
   async postProcess(conversationId: string, userId?: string): Promise<void> {
     await this.memoryManager.checkAndSummarize(conversationId);
-
-    if (userId) {
-      this.memoryManager.extractLongTermMemory(userId, conversationId).catch(e => {
-        console.error('[ChatAppService] 长期记忆提取失败:', e.message);
-      });
-    }
+    // 严格限制：禁用长期记忆提取，仅依赖 Redis 短期记忆（40条）
   }
 
   async deleteConversation(conversationId: string): Promise<void> {

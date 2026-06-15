@@ -138,6 +138,23 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
       {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && (
         <FinalReplyToggle isFinal={!!data.isFinalReply} onToggle={() => update({ isFinalReply: !data.isFinalReply })} />
       )}
+
+      {/* 节点执行后的对话反馈 */}
+      {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && node.type !== 'reply' && node.type !== 'llm_reply' && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={panelStyles.field}>
+            <label style={panelStyles.label}>💬 对话反馈（可选）</label>
+            <textarea
+              style={panelStyles.textarea}
+              value={data.responseText || ''}
+              onChange={e => update({ responseText: e.target.value })}
+              placeholder="执行此节点后向用户发送的消息。支持 {{参数名}} 变量。留空则不发送。"
+              rows={2}
+            />
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>执行完此节点后自动向对话窗口发送此消息</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

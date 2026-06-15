@@ -12,7 +12,7 @@ import { Message } from '../model/message.model';
 
 const REDIS_MSG_KEY = (id: string) => `chat:messages:${id}`;
 const REDIS_SUMMARY_KEY = (id: string) => `chat:summary:${id}`;
-const SHORT_TERM_LIMIT = 20;
+const SHORT_TERM_LIMIT = 40;
 const CONTEXT_TOKEN_LIMIT = 8000;
 const SUMMARY_THRESHOLD = 0.8;
 

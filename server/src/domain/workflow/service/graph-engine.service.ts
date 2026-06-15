@@ -4,7 +4,7 @@ import { Action, ActionContext } from '../../ai/action/action.interface';
 import {
   FlowNode, FlowEdge, Workflow, ExecContext,
 } from '../model/workflow.model';
-import { sseEvent } from '../model/sse-events';
+import { sseEvent, contentEvent } from '../model/sse-events';
 import { AgentService } from '../../agent/service/agent.service';
 import { NodeExecutorRegistry, ExecutorDeps, createDefaultRegistry } from '../executor';
 
@@ -188,6 +188,14 @@ export class GraphEngineService {
     if (node.data.isFinalReply && execCtx.lastOutput) {
       console.log(`[Workflow] 📤 捕获最终回复节点: ${nodeId}`);
       execCtx.finalReplyContent = execCtx.lastOutput;
+    }
+
+    // 节点可配置 responseText — 执行后向对话窗口发送反馈信息
+    if (node.data.responseText) {
+      const respText = node.data.responseText.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => execCtx.params[key] || `{{${key}}}`);
+      yield contentEvent(respText);
+      execCtx.lastOutput = respText;
+      execCtx.contentYielded = true;
     }
 
     // 获取下游节点并递归
