@@ -99,11 +99,23 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
 
       {/* AI 生成 */}
       {node.type === 'llm_reply' && (
-        <div style={panelStyles.field}>
-          <label style={panelStyles.label}>生成提示词</label>
-          <textarea style={panelStyles.textarea} value={data.prompt || ''} onChange={e => update({ prompt: e.target.value })} placeholder="根据工作流执行结果，生成友好的用户回复" rows={4} />
-        </div>
+        <>
+          <div style={panelStyles.field}>
+            <label style={panelStyles.label}>生成提示词</label>
+            <textarea style={panelStyles.textarea} value={data.prompt || ''} onChange={e => update({ prompt: e.target.value })} placeholder="根据工作流执行结果，生成友好的用户回复" rows={4} />
+          </div>
+          <PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} />
+        </>
       )}
+
+      {/* Agent 透传开关 */}
+      {node.type === 'agent' && <><AgentFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
+
+      {/* Agent Team 透传开关 */}
+      {node.type === 'agent_team' && <><AgentTeamFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
+
+      {/* Master-Sub 透传开关 */}
+      {node.type === 'master_sub_agent' && <><MasterSubFields data={data} update={update} agents={agents} /><PassthroughToggle enabled={!!data.passthroughAIOutput} onToggle={() => update({ passthroughAIOutput: !data.passthroughAIOutput })} /></>}
 
       {/* 知识检索 */}
       {node.type === 'knowledge' && (
@@ -125,14 +137,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
       {/* HTTP */}
       {node.type === 'http' && <HttpFields data={data} update={update} />}
 
-      {/* Agent */}
-      {node.type === 'agent' && <AgentFields data={data} update={update} agents={agents} />}
 
-      {/* Agent Team */}
-      {node.type === 'agent_team' && <AgentTeamFields data={data} update={update} agents={agents} />}
-
-      {/* Master-Sub */}
-      {node.type === 'master_sub_agent' && <MasterSubFields data={data} update={update} agents={agents} />}
 
       {/* 最终回复开关 */}
       {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && (
@@ -140,7 +145,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ node, onUpdate, agents })
       )}
 
       {/* 节点执行后的对话反馈 */}
-      {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && node.type !== 'reply' && node.type !== 'llm_reply' && (
+      {node.type !== 'trigger' && node.type !== 'start' && node.type !== 'end' && node.type !== 'reply' && (
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <label style={{ ...panelStyles.label, marginBottom: 10 }}>💬 对话反馈（可选）</label>
 
@@ -497,6 +502,29 @@ const FinalReplyToggle: React.FC<{ isFinal: boolean; onToggle: () => void }> = (
       <div>
         <div style={{ fontSize: 12, fontWeight: 600, color: isFinal ? '#f59e0b' : '#94a3b8' }}>📤 设为最终回复</div>
         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>此节点输出将作为工作流最终回复内容</div>
+      </div>
+    </label>
+  </div>
+);
+
+/** 透传 AI 输出开关 */
+const PassthroughToggle: React.FC<{ enabled: boolean; onToggle: () => void }> = ({ enabled, onToggle }) => (
+  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={onToggle}>
+      <div style={{
+        width: 36, height: 20, borderRadius: 10,
+        background: enabled ? '#a855f7' : 'rgba(255,255,255,0.1)',
+        position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0,
+      }}>
+        <div style={{
+          width: 16, height: 16, borderRadius: '50%', background: '#fff',
+          position: 'absolute' as const, top: 2,
+          left: enabled ? 18 : 2, transition: 'left 0.2s',
+        }} />
+      </div>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#a855f7' : '#94a3b8' }}>🔄 透传 AI 输出</div>
+        <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>将此节点的 AI 执行结果直接发送到对话窗口</div>
       </div>
     </label>
   </div>

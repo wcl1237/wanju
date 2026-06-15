@@ -190,6 +190,13 @@ export class GraphEngineService {
       execCtx.finalReplyContent = execCtx.lastOutput;
     }
 
+    // 透传 AI 输出：将节点 AI 执行结果直接发送到对话窗口
+    if (node.data.passthroughAIOutput && execCtx.lastOutput && !execCtx.contentYielded) {
+      console.log(`[Workflow] 🔄 透传 AI 输出: ${nodeId}`);
+      yield contentEvent(execCtx.lastOutput);
+      execCtx.contentYielded = true;
+    }
+
     // 节点可配置 responseText — 执行后向对话窗口发送固定反馈
     const trimmedResponse = (node.data.responseText || '').trim();
     if (trimmedResponse) {
