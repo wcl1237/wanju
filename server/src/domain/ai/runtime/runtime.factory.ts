@@ -7,7 +7,6 @@ import { RuntimeType } from '../../blueprint/model/blueprint.model';
 import { IAgentRuntime } from './runtime.interface';
 import { ReactRuntime } from './react.runtime';
 import { WorkflowRuntime } from './workflow.runtime';
-import { StandaloneRuntime } from './standalone.runtime';
 import { HarnessRuntime } from './harness.runtime';
 
 @Provide()
@@ -20,9 +19,6 @@ export class RuntimeFactory {
   workflowRuntime: WorkflowRuntime;
 
   @Inject()
-  standaloneRuntime: StandaloneRuntime;
-
-  @Inject()
   harnessRuntime: HarnessRuntime;
 
   create(runtimeType: RuntimeType): IAgentRuntime {
@@ -31,8 +27,6 @@ export class RuntimeFactory {
         return this.reactRuntime;
       case 'workflow':
         return this.workflowRuntime;
-      case 'standalone':
-        return this.standaloneRuntime;
       case 'harness':
         return this.harnessRuntime;
       default:

@@ -15,6 +15,7 @@ import { ActionRegistry } from '../action/action-registry';
 import { CustomerService } from '../../customer/service/customer.service';
 import { SkillService } from '../../skill/service/skill.service';
 import { WorkflowService } from '../../workflow/service/workflow.service';
+import { AgentService } from '../../agent/service/agent.service';
 
 @Provide()
 @Scope(ScopeEnum.Singleton)
@@ -32,6 +33,9 @@ export class ReactRuntime implements IAgentRuntime {
   workflowService: WorkflowService;
 
   @Inject()
+  agentService: AgentService;
+
+  @Inject()
   actionRegistry: ActionRegistry;
 
   async *execute(
@@ -41,6 +45,23 @@ export class ReactRuntime implements IAgentRuntime {
     const config = context.config as ReactRuntimeConfig;
     const startTime = Date.now();
     console.log(`[ReactRuntime] ━━━ 对话开始 ━━━ blueprint=${context.blueprintId}`);
+
+    // 如果绑定了 Agent，合并配置
+    if (config.agentId) {
+      const agent = await this.agentService.getById(config.agentId);
+      if (agent) {
+        // Agent.prompt 作为 systemPrompt
+        config.systemPrompt = agent.prompt;
+        // 继承模式：使用 Agent 的能力配置
+        if (config.inheritAgentCapabilities) {
+          config.actions = agent.actions;
+          config.skillIds = agent.skillIds;
+          config.workflowIds = agent.workflowIds;
+        }
+      } else {
+        console.warn(`[ReactRuntime] Agent ${config.agentId} 不存在，使用默认配置`);
+      }
+    }
 
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     const userText = lastUserMsg?.content || '';

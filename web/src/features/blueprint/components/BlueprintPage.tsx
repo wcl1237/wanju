@@ -25,8 +25,7 @@ const BlueprintPage: React.FC = () => {
     const isConfigured = (() => {
       switch (bp.runtimeType) {
         case 'react':
-        case 'standalone':
-          return bp.runtimeType === 'react' || !!(bp.config as any)?.agentId;
+          return true;
         case 'workflow':
           return !!(bp.config as any)?.workflowId;
         case 'harness':
@@ -149,10 +148,10 @@ const CreateBlueprintDialog: React.FC<{ onClose: () => void; onCreated: () => vo
         react: {
           systemPrompt: `你是${name}，一个专业的智能助手。`, actions: ['search_knowledge', 'create_ticket', 'save_customer_info'],
           skillIds: [], workflowIds: [], maxRounds: 10, temperature: 0.7, enableMemory: true, enableCustomerCollection: false,
+          inheritAgentCapabilities: false,
         },
         workflow: { workflowId: '', fallbackPrompt: '暂无可用流程' },
         harness: { chain: [] },
-        standalone: { agentId: '', actions: [] },
       };
 
       const dto: CreateBlueprintDTO = {

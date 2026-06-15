@@ -7,7 +7,7 @@
 
 // ==================== 运行时类型 ====================
 
-export type RuntimeType = 'react' | 'workflow' | 'harness' | 'standalone';
+export type RuntimeType = 'react' | 'workflow' | 'harness';
 
 // ==================== 运行时配置 ====================
 
@@ -16,13 +16,15 @@ export type RuntimeType = 'react' | 'workflow' | 'harness' | 'standalone';
  */
 export interface ReactRuntimeConfig {
   systemPrompt: string;
+  agentId?: string;                  // 绑定 Agent 池中的 Agent，优先使用 Agent.prompt
   actions: string[];
-  skillIds: string[];             // 空 = 匹配所有启用技能
-  workflowIds: string[];          // 空 = 匹配所有启用工作流
+  skillIds: string[];
+  workflowIds: string[];
   maxRounds: number;
   temperature: number;
   enableMemory: boolean;
   enableCustomerCollection: boolean;
+  inheritAgentCapabilities: boolean;  // true=继承 Agent 的 actions/skillIds/workflowIds
 }
 
 /**
@@ -99,22 +101,11 @@ export type HarnessStepConfig =
   | ConditionStepConfig
   | LoopStepConfig;
 
-/**
- * Standalone 运行时配置 — 从 Agent 池选择一个 Agent 直接对话
- */
-export interface StandaloneRuntimeConfig {
-  agentId: string;
-  actions: string[];
-  skillIds: string[];     // 可触发技能 ID
-  workflowIds: string[];  // 可触发工作流 ID
-}
-
 /** 统一运行时配置 */
 export type RuntimeConfig =
   | ReactRuntimeConfig
   | WorkflowRuntimeConfig
-  | HarnessRuntimeConfig
-  | StandaloneRuntimeConfig;
+  | HarnessRuntimeConfig;
 
 // ==================== AgentBlueprint ====================
 
@@ -173,4 +164,5 @@ export const DEFAULT_REACT_CONFIG: ReactRuntimeConfig = {
   temperature: 0.7,
   enableMemory: true,
   enableCustomerCollection: true,
+  inheritAgentCapabilities: false,
 };
