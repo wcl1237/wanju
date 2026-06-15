@@ -17,10 +17,12 @@ export interface FlowNodeData {
   conditionField?: string;
   conditionOp?: string; // 'contains' | 'equals' | 'not_empty'
   conditionValue?: string;
+  maxRetries?: number; // 条件节点最大重试次数，超过后强制走 true 分支（默认 3）
   // reply
   replyText?: string;
   // llm_reply
   prompt?: string;
+  resultField?: string; // 判断结论提取: 将 LLM 输出中的结论(PASS/FAIL)提取后写入 ctx.params[resultField]
   // extract
   params?: string[];
   extractPrompt?: string;

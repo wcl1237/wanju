@@ -12,7 +12,23 @@ export class ConditionExecutor implements INodeExecutor {
     deps: ExecutorDeps,
   ): AsyncGenerator<string, NodeExecutionResult> {
     const stepStart = Date.now();
-    const result = this.evaluate(node.data, ctx);
+
+    // 跟踪条件节点执行次数，支持 maxRetries 防止无限循环
+    const retryKey = `_condition_count_${node.id}`;
+    const currentCount = parseInt(ctx.params[retryKey] || '0', 10) + 1;
+    ctx.params[retryKey] = String(currentCount);
+
+    const maxRetries = node.data.maxRetries ?? 3;
+    let result: boolean;
+
+    if (currentCount > maxRetries) {
+      // 超过最大重试次数，强制走 true 分支
+      result = true;
+      console.log(`[Condition] ⚠️ 节点 ${node.id} 已达最大重试次数 (${maxRetries})，强制通过`);
+    } else {
+      result = this.evaluate(node.data, ctx);
+      console.log(`[Condition] 节点 ${node.id} 第 ${currentCount}/${maxRetries} 次判断: ${result}`);
+    }
 
     yield stepEvent({
       stepIndex: deps.visitedCount - 1,
@@ -32,7 +48,22 @@ export class ConditionExecutor implements INodeExecutor {
     const value = data.conditionValue || '';
 
     let fieldValue = ctx.params[field] || '';
-    if (field === 'userMessage') fieldValue = ctx.userMessage;
+    if (field === 'userMessage') {
+      fieldValue = ctx.userMessage;
+    }
+    // LLM 节点输出存储在 ctx.lastOutput / ctx.results 中，而非 ctx.params
+    // 当 conditionField 为 'llm_output' 或 params 中无对应值时，回退到上一个节点的输出
+    if (!fieldValue && (field === 'llm_output' || field === 'lastOutput')) {
+      fieldValue = ctx.lastOutput || '';
+    }
+    // 进一步回退: 尝试从 results Map 中查找最近的节点输出
+    if (!fieldValue && ctx.results.size > 0) {
+      const entries = Array.from(ctx.results.entries());
+      const lastEntry = entries[entries.length - 1];
+      if (lastEntry && typeof lastEntry[1] === 'string') {
+        fieldValue = lastEntry[1];
+      }
+    }
 
     switch (op) {
       case 'contains': return fieldValue.includes(value);

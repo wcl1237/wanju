@@ -48,6 +48,31 @@ ${resultsSummary}
     ctx.lastOutput = fullContent;
     ctx.contentYielded = true;
 
+    // 判断结论提取: 当配置了 resultField 时，用轻量 LLM 调用从回复中提取判断结论
+    // 将结论写入 ctx.params[resultField]，供下游 condition 节点读取
+    // 这样条件判断基于独立提取的结论，而非搜索整段回复内容，避免误匹配
+    const resultField = node.data.resultField;
+    if (resultField && fullContent) {
+      try {
+        const extractPrompt = `请从以下文本中提取最终审查/分析结论。只回复 PASS 或 FAIL，不要输出其他任何内容。
+
+文本内容:
+${fullContent.slice(-2000)}
+
+最终结论（只回复PASS或FAIL）:`;
+        const judgment = await deps.llmClient.complete(extractPrompt, { temperature: 0, maxTokens: 10 });
+        const cleaned = judgment.trim().toUpperCase();
+        // 只接受明确的 PASS 或 FAIL
+        const finalJudgment = cleaned.includes('PASS') && !cleaned.includes('FAIL') ? 'PASS'
+          : cleaned.includes('FAIL') && !cleaned.includes('PASS') ? 'FAIL'
+          : cleaned;
+        ctx.params[resultField] = finalJudgment;
+        console.log(`[LlmReply] 提取判断结论: ${resultField}="${finalJudgment}" (原始: "${cleaned}")`);
+      } catch (e: any) {
+        console.error(`[LlmReply] 结论提取失败 (${node.id}):`, e.message);
+      }
+    }
+
     yield stepEvent({
       stepIndex: deps.visitedCount - 1,
       nodeId: node.id,
