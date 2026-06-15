@@ -192,4 +192,6 @@ export interface ExecContext {
   contentYielded: boolean;
   /** 标记为“最终回复”的节点输出，后面的覆盖前面的 */
   finalReplyContent?: string;
+  /** 全局执行步数计数器（防止无限循环） */
+  _stepCount?: number;
 }

@@ -110,11 +110,13 @@ export class GraphEngineService {
     execCtx: ExecContext,
     visited: Set<string>
   ): AsyncGenerator<string> {
-    // 防环
-    if (visited.has(nodeId)) {
-      console.warn(`[Workflow] 跳过已访问节点: ${nodeId}`);
+    // 全局步数限制，防止无限循环（不限制节点重复执行）
+    execCtx._stepCount = (execCtx._stepCount || 0) + 1;
+    if (execCtx._stepCount > 100) {
+      console.error(`[Workflow] 达到最大执行步数 (100)，终止执行`);
       return;
     }
+
     visited.add(nodeId);
 
     const node = nodes.find(n => n.id === nodeId);
@@ -123,7 +125,7 @@ export class GraphEngineService {
       return;
     }
 
-    console.log(`[Workflow] 📌 遍历节点: ${node.type} (${nodeId})`);
+    console.log(`[Workflow] 📌 遍历节点: ${node.type} (${nodeId}) [step ${execCtx._stepCount}]`);
 
     // 查找执行器
     const executor = this.registry.get(node.type);
@@ -138,7 +140,7 @@ export class GraphEngineService {
       agentService: this.agentService,
       actions,
       actionContext: context,
-      visitedCount: visited.size,
+      visitedCount: execCtx._stepCount,
     };
 
     // 执行节点
@@ -173,7 +175,7 @@ export class GraphEngineService {
       console.error(`[Workflow] 节点 ${nodeId} 执行失败:`, e.message);
       yield sseEvent({
         type: 'workflow_step',
-        stepIndex: visited.size - 1,
+        stepIndex: execCtx._stepCount - 1,
         nodeId: node.id,
         stepType: node.type,
         stepName: `${node.data.label || node.type} (失败)`,
