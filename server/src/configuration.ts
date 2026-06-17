@@ -6,9 +6,11 @@ import * as staticFile from '@midwayjs/static-file';
 import * as swagger from '@midwayjs/swagger';
 import * as orm from '@midwayjs/typeorm';
 import * as redis from '@midwayjs/redis';
+import * as ws from '@midwayjs/ws';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
 import { AuthMiddleware } from './interface/middleware/auth.middleware';
+import { OpenClawService } from './domain/openclaw/service/openclaw.service';
 
 // 加载环境变量
 dotenv.config({ path: join(__dirname, '../.env') });
@@ -22,6 +24,7 @@ dotenv.config({ path: join(__dirname, '../.env') });
     swagger,
     orm,
     redis,
+    ws,
   ],
   importConfigs: [join(__dirname, './config')],
 })
@@ -48,5 +51,20 @@ export class MainConfiguration {
 
     // JWT 鉴权中间件
     this.app.useMiddleware([AuthMiddleware]);
+
+    // 启动云龙虾容器清理定时器
+    const containerContext = this.app.getApplicationContext();
+    const openClawService = await containerContext.getAsync(OpenClawService);
+    openClawService.startCleanupTask();
+  }
+
+  async onStop() {
+    try {
+      const containerContext = this.app.getApplicationContext();
+      const openClawService = await containerContext.getAsync(OpenClawService);
+      openClawService.stopCleanupTask();
+    } catch (err) {
+      // ignore
+    }
   }
 }

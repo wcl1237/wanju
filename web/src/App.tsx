@@ -19,6 +19,7 @@ import AgentPool from './features/agent/components/AgentPool';
 import BlueprintPage from './features/blueprint/components/BlueprintPage';
 import BlueprintEditor from './features/blueprint/components/BlueprintEditor';
 import HomePage from './features/home/components/HomePage';
+import OpenClawPage from './features/openclaw/components/OpenClawPage';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
@@ -30,6 +31,7 @@ function getActivePage(pathname: string): NavPage {
   if (pathname.startsWith('/workflows')) return 'workflows';
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/skills')) return 'skills';
+  if (pathname.startsWith('/openclaw')) return 'openclaw';
   return 'home';
 }
 
@@ -41,6 +43,7 @@ const pageToRoute: Record<NavPage, string> = {
   workflows: '/workflows',
   agents: '/agents',
   skills: '/skills',
+  openclaw: '/openclaw',
 };
 
 /**
@@ -237,6 +240,7 @@ function MainLayout({ user, onLogout }: { user: { id: string; username: string }
           <Route path="/workflows/:id/edit" element={<WorkflowEditorRoute />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/openclaw" element={<div style={styles.pageContent}><OpenClawPage /></div>} />
           <Route path="/" element={<div style={styles.pageContent}><HomePage /></div>} />
           <Route path="/home" element={<div style={styles.pageContent}><HomePage /></div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
