@@ -58,6 +58,13 @@
 - **用户画像** — 长期记忆驱动的个性化服务
 - **跨对话记忆** — 自动提取和关联用户长期记忆
 
+### 🦞 云龙虾容器工作台 (OpenClaw)
+- **按需容器热拉起** — 一键秒级拉起完全隔离的宿主 Docker Agent 沙箱实例
+- **暂停与物理销毁** — 支持暂停释放容器（保留历史），或物理销毁彻底清空对话记录与工作区代码
+- **防冲突双向通信** — 3s 心跳定期检测和 SUPERSEDED 事件判定，保护唯一连接
+- **诊断遥测看板** — 实时双向 WebSocket 通信通道，右侧抽屉持续输出网关和容器日志
+- **Agent 执行卡片渲染** — Markdown 文本流式呈现，支持 Browser base64 网页截图、Shell 命令行输出等高级卡片
+
 ---
 
 ## 🏗 技术架构
@@ -170,35 +177,50 @@ web/src/
 - Redis（本地或远程）
 - Ollama（本地，用于 Embedding）
 
-### 安装依赖
+### 🚀 启动与开发 (推荐一键拉起)
+
+我们提供了封装好的自检与一键启动脚本 `start.sh`，可全自动检查开发环境、安装依赖、校验并创建本地配置路径，然后并发拉起前后端服务：
 
 ```bash
-# 后端
-cd server && npm install
+# 1. 赋予脚本执行权限（仅需首次执行）
+chmod +x start.sh
 
-# 前端
-cd web && npm install
+# 2. 一键自检并并发启动前后端
+./start.sh
 ```
 
-### 环境配置
+> 💡 **自动确认模式**：若想在无人值守状态下全自动补全缺失的依赖、配置模板并启动服务，可以追加 `-y` 或 `--yes` 参数运行：`./start.sh -y`
 
+### ⚙️ 手动配置与启动 (高级选项)
+
+若您习惯使用手动调试步骤，也可以按以下顺序配置和拉起服务：
+
+#### 1. 配置文件准备
+复制并修改后端目录下的环境变量模板：
 ```bash
-# server/.env
+cp server/.env.example server/.env
+```
+打开 `server/.env`，填写如下必要配置（其中大模型密钥为必填）：
+```ini
 AI_API_KEY=your-api-key
 AI_API_BASE=https://coding.dashscope.aliyuncs.com/v1
 AI_MODEL=qwen3.7-plus
 EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_API_BASE=http://localhost:11434/v1
+
+# 云龙虾 (OpenClaw) 挂载目录 (请配置宿主机上的绝对路径)
+OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw:latest
+OPENCLAW_SHARED_DATA_DIR=/Users/your_username/Desktop/code/wanju/data/openclaw
 ```
 
-### 启动开发
-
+#### 2. 安装依赖与启动服务
+需要在两个独立的终端窗口分别拉起：
 ```bash
-# 终端 1 — 后端（端口 7001）
-cd server && npm run dev
+# 终端 1 — 后端服务（默认端口 7001）
+cd server && npm install && npm run dev
 
-# 终端 2 — 前端（端口 5173）
-cd web && npm run dev
+# 终端 2 — 前端服务（默认端口 5173）
+cd web && npm install && npm run dev
 ```
 
 ### 生产构建
@@ -231,6 +253,11 @@ cd server && npm start
 | **Agent** | `POST /api/agents/generate-prompt` | AI 生成 Prompt |
 | **知识库** | `GET/POST/DELETE /api/knowledge` | 知识文档管理 |
 | **工单** | `GET/POST/PUT /api/tickets` | 工单管理 |
+| **云龙虾** | `POST /api/openclaw/start` | 一键热启动容器实例 |
+| **云龙虾** | `POST /api/openclaw/stop` | 暂停容器（保留历史文件） |
+| **云龙虾** | `POST /api/openclaw/destroy` | 物理销毁容器与持久化数据 |
+| **云龙虾** | `GET /api/openclaw/status` | 获取活跃容器会话状态 |
+| **云龙虾** | `WS /ws/openclaw?sessionId=...` | WebSocket 实时对话与遥测日志网关 |
 | **技能** | `GET/POST/PUT/DELETE /api/skills` | 技能 CRUD |
 | **技能** | `POST /api/skills/generate` | AI 智能创建技能 |
 | **客户** | `GET /api/customers` | 客户信息 |
