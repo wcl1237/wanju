@@ -6,6 +6,41 @@ import React from 'react';
 const HomePage: React.FC = () => {
   return (
     <div style={s.container}>
+      <style>{`
+        .quick-link-card {
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        }
+        .quick-link-card:hover {
+          transform: translateY(-4px);
+          background: rgba(255, 255, 255, 0.08) !important;
+          border-color: rgba(99, 102, 241, 0.5) !important;
+          box-shadow: 0 10px 20px -10px rgba(99, 102, 241, 0.4);
+        }
+        .section-card {
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+          backdrop-filter: blur(20px);
+        }
+        .section-card:hover {
+          border-color: rgba(139, 92, 246, 0.3) !important;
+          background: rgba(255, 255, 255, 0.04) !important;
+          box-shadow: 0 16px 40px -15px rgba(0, 0, 0, 0.6);
+        }
+        .arch-box {
+          transition: all 0.25s ease !important;
+        }
+        .arch-box:hover {
+          transform: translateY(-2px);
+          background: rgba(255, 255, 255, 0.06) !important;
+          box-shadow: 0 6px 15px -8px rgba(255, 255, 255, 0.15);
+        }
+        .faq-item {
+          transition: all 0.25s ease !important;
+        }
+        .faq-item:hover {
+          border-color: rgba(245, 158, 11, 0.3) !important;
+          background: rgba(255, 255, 255, 0.04) !important;
+        }
+      `}</style>
       <div style={s.content}>
         {/* 顶部 Hero */}
         <div style={s.hero}>
@@ -17,7 +52,7 @@ const HomePage: React.FC = () => {
         {/* 快速导航 */}
         <div style={s.quickNav}>
           {quickLinks.map((link, i) => (
-            <a key={i} href={`#section-${i}`} style={s.quickLink}>
+            <a key={i} href={`#section-${i}`} className="quick-link-card" style={s.quickLink}>
               <span style={{ fontSize: 24 }}>{link.icon}</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{link.label}</span>
             </a>
@@ -27,7 +62,7 @@ const HomePage: React.FC = () => {
         {/* 正文 */}
         <div style={s.body}>
           {sections.map((section, i) => (
-            <div key={i} id={`section-${i}`} style={s.section}>
+            <div key={i} id={`section-${i}`} className="section-card" style={s.section}>
               <div style={{ ...s.sectionHeader, borderLeftColor: section.color }}>
                 <span style={{ fontSize: 28 }}>{section.icon}</span>
                 <div>
@@ -56,7 +91,7 @@ const HomePage: React.FC = () => {
           ))}
 
           {/* 架构概览 */}
-          <div style={s.section}>
+          <div className="section-card" style={s.section}>
             <div style={{ ...s.sectionHeader, borderLeftColor: '#8b5cf6' }}>
               <span style={{ fontSize: 28 }}>🏛️</span>
               <div>
@@ -66,42 +101,49 @@ const HomePage: React.FC = () => {
             </div>
             <div style={s.archDiagram}>
               <div style={s.archRow}>
-                <div style={{ ...s.archBox, borderColor: '#a855f7' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#a855f7' }}>
                   <div style={s.archBoxTitle}>🏭 智能体 (Blueprint)</div>
                   <div style={s.archBoxText}>面向用户的入口，选择运行时类型并配置</div>
                 </div>
               </div>
               <div style={s.archArrow}>▼ 选择运行时</div>
               <div style={s.archRow}>
-                <div style={{ ...s.archBox, borderColor: '#22c55e' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#22c55e' }}>
                   <div style={s.archBoxTitle}>⚡ ReAct 运行时</div>
                   <div style={s.archBoxText}>LLM + 工具循环，支持绑定 Agent</div>
                 </div>
-                <div style={{ ...s.archBox, borderColor: '#f59e0b' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#f59e0b' }}>
                   <div style={s.archBoxTitle}>🔄 工作流运行时</div>
                   <div style={s.archBoxText}>图引擎驱动的确定性流程</div>
                 </div>
               </div>
               <div style={s.archArrow}>▼ 调用能力</div>
               <div style={s.archRow}>
-                <div style={{ ...s.archBox, borderColor: '#06b6d4' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#06b6d4' }}>
                   <div style={s.archBoxTitle}>🧑‍💼 Agent 池</div>
                   <div style={s.archBoxText}>可复用的 Prompt + 工具 + 技能组合</div>
                 </div>
-                <div style={{ ...s.archBox, borderColor: '#10b981' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#10b981' }}>
                   <div style={s.archBoxTitle}>⚡ 技能中心</div>
                   <div style={s.archBoxText}>Skill → SkillToolBridge → Function Calling Tool</div>
                 </div>
-                <div style={{ ...s.archBox, borderColor: '#3b82f6' }}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#3b82f6' }}>
                   <div style={s.archBoxTitle}>📚 知识库</div>
                   <div style={s.archBoxText}>文档向量化，语义检索</div>
+                </div>
+              </div>
+              <div style={s.archArrow}>▼ 容器沙箱执行环境</div>
+              <div style={s.archRow}>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#ec4899', minWidth: 260 }}>
+                  <div style={s.archBoxTitle}>🦞 云龙虾容器沙箱 (OpenClaw)</div>
+                  <div style={s.archBoxText}>物理隔离的独立运行实例，双向 WebSocket 通道，执行高权限代码与脚本</div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* 常见问题 */}
-          <div style={s.section}>
+          <div className="section-card" style={s.section}>
             <div style={{ ...s.sectionHeader, borderLeftColor: '#f59e0b' }}>
               <span style={{ fontSize: 28 }}>❓</span>
               <div>
@@ -111,7 +153,7 @@ const HomePage: React.FC = () => {
             </div>
             <div style={s.sectionBody}>
               {faqs.map((faq, i) => (
-                <div key={i} style={s.faqItem}>
+                <div key={i} className="faq-item" style={s.faqItem}>
                   <div style={s.faqQ}>Q: {faq.q}</div>
                   <div style={s.faqA}>{faq.a}</div>
                 </div>
@@ -133,6 +175,7 @@ const quickLinks = [
   { icon: '⚡', label: '技能中心' },
   { icon: '📚', label: '知识库' },
   { icon: '🎫', label: '工单管理' },
+  { icon: '🦞', label: '云龙虾' },
 ];
 
 interface Step { title: string; text: string; tip?: string }
@@ -157,7 +200,7 @@ const sections: Section[] = [
       { title: '创建 Agent', text: '点击左侧「Agent 池」→「+ 新建 Agent」，填写名称和 Prompt（角色定义）。' },
       { title: '配置能力', text: '勾选该 Agent 可使用的工具（知识检索、创建工单、保存用户信息）、技能和工作流。', tip: 'Agent 的能力定义可以被 Blueprint 继承或覆盖。' },
       { title: 'AI 辅助生成 Prompt', text: '在 Prompt 输入框上方点击「✨ AI 帮我写」，系统会根据 Agent 名称和描述自动生成 Prompt。' },
-      { title: '在 Blueprint 中使用', text: '在智能体编辑页面的「绑定 Agent」下拉框中选择已创建的 Agent。可选择「继承 Agent 配置」或「自定义配置」。' },
+      { title: '在 Blueprint 中使用', text: '在智能体编辑页面的「绑定 Agent」下拉框中选择已创建 of Agent。可选择「继承 Agent 配置」或「自定义配置」。' },
     ],
   },
   {
@@ -200,6 +243,17 @@ const sections: Section[] = [
       { title: '工单详情', text: '点击工单卡片查看详情，包括创建时间、关联的对话信息等。' },
     ],
   },
+  {
+    icon: '🦞', title: '云龙虾 (OpenClaw)', desc: '按需拉起隔离 Docker 沙箱，支持物理与代码级高级交互',
+    color: '#ec4899',
+    steps: [
+      { title: '进入云龙虾控制台', text: '点击左侧导航「云龙虾」，即可查看控制台界面。首次进入时状态显示为「云龙虾服务就绪」。' },
+      { title: '一键拉起沙箱容器', text: '点击「🔥 一键启动云龙虾」按钮，系统将自动在宿主机后台通过 Docker 守护进程，秒级冷启动专属于当前登录用户的隔离容器实例。', tip: '若本地不存在 OpenClaw 镜像，系统会在后台自动下载拉取镜像 (ghcr.io/openclaw/openclaw:latest)，此时启动可能需要一些时间，请耐心等待日志加载。' },
+      { title: '实时对话与 WebSocket 调试', text: '容器成功运行后，左侧为双向 WebSocket 通信的聊天界面，支持直接对虚拟 Agent 下达任务（如编写代码、执行 shell、操作浏览器截图）；右侧终端输出实时容器连接日志。', tip: '对话顶部的延迟指标（如 RTT 延迟: 12ms）是通过 WebSocket 3 秒心跳在前端与容器网关之间实时测量并展现的。' },
+      { title: '暂停实例与资源释放', text: '点击右上角「⏸️ 暂停实例」，系统将优雅停止容器运行并释放宿主机资源，同时【保留】用户挂载目录下的全部代码与历史会话，重新启动可瞬间恢复。', tip: '若 10 分钟无数据交换，系统定时器也会自动触发暂停清理。' },
+      { title: '物理销毁实例与彻底清空', text: '点击右上角「🗑️ 销毁实例」并确认警告，系统将不仅停止容器，还会从宿主机磁盘彻底【物理删除】该用户目录下的所有历史文件、设置及工作区代码。此操作不可逆。' },
+    ],
+  },
 ];
 
 const faqs = [
@@ -207,13 +261,18 @@ const faqs = [
   { q: 'Agent 和 Blueprint 是什么关系？', a: 'Agent 是可复用的角色定义（Prompt + 能力），Blueprint 是面向用户的智能体入口。Blueprint 可以绑定 Agent 来继承其配置，也可以独立自定义。' },
   { q: '技能和内置 Action 有什么区别？', a: '内置 Action（如知识检索、创建工单）是代码实现的工具；技能是用户可配置的 Prompt-based Tool，通过 SkillToolBridge 转为 Function Calling 工具。两者对 LLM 来说都是工具。' },
   { q: '如何测试我的智能体配置？', a: '在智能体列表页点击卡片上的「💬 对话」按钮，即可进入专属对话测试页面。' },
+  { q: '启动云龙虾时提示“容器引导异常”或连接不上怎么办？', a: '首先请确保您的宿主机已经运行了 Docker Desktop (可在控制台执行 docker ps 验证)；其次检查 server/.env 里的 OPENCLAW_SHARED_DATA_DIR 路径是否为绝对路径，如果是 macOS，需确认该路径已在 Docker 共享目录 File Sharing 列表中授权。' },
+  { q: '为什么打开了新的云龙虾窗口，旧的控制台就会断开并显示已被接管？', a: '为避免同一个用户的 Docker 沙箱代理被多处同时控制而产生状态和数据竞争，系统设计了抢占接管（Owner Takeover）机制。当在别处建立新链路时，旧的 WebSocket 会自动关闭并显示提示，随时可以在旧控制台点击“夺回连接”切换回来。' },
 ];
 
 /* ─── 样式 ─── */
 
 const s: Record<string, React.CSSProperties> = {
   container: {
-    width: '100%', height: '100%', overflow: 'auto', background: '#0a0a0f',
+    width: '100%',
+    height: '100%',
+    overflow: 'auto',
+    background: 'radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 35%, rgba(10, 10, 18, 0.98) 100%)',
   },
   content: {
     maxWidth: 900, margin: '0 auto', padding: '40px 24px 80px',
@@ -327,3 +386,4 @@ const s: Record<string, React.CSSProperties> = {
 };
 
 export default HomePage;
+

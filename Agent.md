@@ -447,3 +447,59 @@ interface ReactRuntimeConfig {
 ### 切换 LLM 模型
 
 修改 `server/.env` 中的 `AI_API_KEY` / `AI_API_BASE` / `AI_MODEL`，支持任何 OpenAI 兼容接口。
+
+---
+
+## 11. 云龙虾 (OpenClaw) 容器沙箱 Agent
+
+### 11.1 概念与定位
+
+**云龙虾 (OpenClaw)** 是系统提供的一个按需热拉起、运行在宿主机 Docker 沙箱中的独立 AI 代理执行环境。相比基于 MemoryManager + LLM API 运行的 ReAct 智能体，云龙虾 Agent 拥有独立的操作系统环境和文件系统，支持容器内的命令执行（如 Shell 工具调用）、网页浏览器截图、代码编写及运行调试等高权限交互，通常用于高级开发者工作台或物理隔离的代码调试沙箱。
+
+### 11.2 状态机生命周期
+
+云龙虾容器会话在前端和后端通过一个多状态的状态机进行维护：
+
+```mermaid
+stateDiagram-v2
+    [*] --> unstarted : 初始状态 / 销毁后
+    unstarted --> starting : 点击启动 / 调用 /api/openclaw/start
+    starting --> running : 容器启动就绪 & WS握手成功
+    starting --> failed : 容器拉起超时 / 镜像缺失
+    running --> reconnecting : 网络异常断开 / 自动退避重连
+    reconnecting --> running : 重连成功
+    reconnecting --> failed : 5次重连上限失败
+    running --> superseded : 其它标签页抢占连接 (Owner Takeover)
+    superseded --> running : 点击“夺回连接”
+    running --> stopped : 点击“暂停实例” / 调用 /api/openclaw/stop / 10分钟闲置清理
+    failed --> unstarted : 手动重试
+    stopped --> starting : 重新启动
+```
+
+- **`unstarted`**: 容器未创建，宿主机仅保留用户目录。
+- **`starting`**: 后端正在向 Docker 申请可用端口，拉取镜像，自动生成配置文件并 `docker start` 容器。
+- **`running`**: 容器已就绪，并且前端通过 WebSocket 链路与后端的 Gateway 代理打通，接收事件推送。
+- **`reconnecting`**: 链路意外断开，前端通过指数退避策略（2s, 4s, 8s, 16s, 32s）发起最多 5 次自动重新连接。
+- **`superseded`**: 为了保护容器中 Agent 执行的唯一性，防止并发链路产生状态竞争，当同一个用户在另一个标签页或设备打开时，旧链路会被网关抢占接管，进入 `superseded` 状态并弹出横幅。
+- **`failed`**: 容器启动失败或重连超限。
+
+### 11.3 实时双向 WebSocket 通信与事件流
+
+云龙虾控制台的底层数据流是通过 `server/src/interface/controller/openclaw.controller.ts` 及 WebSocket 网关来承载的：
+
+- **3s 心跳探测**: 前端与后端每 3 秒进行一次 ping-pong 数据交换，并在前端动态计算和绘制 RTT 延迟，评估网络通信状况。
+- **历史回放**: 握手成功后，前端会主动发送 `chat.history` 请求，网关在完成鉴权挑战后会自动回传历史消息，前端在 100ms 内重构并渲染历史对话气泡。
+- **事件流归一化**: `normalizeWSEvent` 工具函数将云龙虾底层异构的流式事件转化为统一的数据格式：
+  - `lifecycle`: 容器的生命周期阶段，包括 `start` 和 `end`（此时关闭 loading，标记消息 sealed）。
+  - `text`: 流式文本 token（逐 chunk 递增，或直接透传最终 content）。
+  - `tool`: 容器内部工具调用的各个阶段（`start`、`running`、`result`），使前端能够渲染出高级工具执行卡片（如 shell 输入输出、browser 截图等）。
+  - `error`: 捕获并流式呈现容器内部的系统级或运行级异常。
+
+### 11.4 挂载与持久化机制
+
+为了在容器销毁或暂停后依旧能够保留用户的开发环境，OpenClawService 实现了基于宿主机绝对路径映射的持久化策略：
+
+- **绑定挂载 (Bind Mount)**: 宿主机的 `${OPENCLAW_SHARED_DATA_DIR}/user_${userId}` 目录会被挂载到容器内部的 `/home/node/.openclaw` 路径。
+- **自动初始化配置**: 如果用户是首次启动，后端服务会自动在其持久化文件夹下生成 `openclaw.json` 默认配置文件，在其中预置大模型提供商（OpenAI 兼容接口如 Qwen）、API Key、基地址以及允许的前端 Origins，避免在容器首次启动时卡在交互引导页面。
+- **暂停 (Pause) 与 闲置清理**: 暂停时仅销毁容器（Docker 容器由于配置了 `AutoRemove: true` 会自动清理），但保留挂载目录。若用户 10 分钟无数据交换，后端定时清理任务（`cleanIdleContainers`）会自动触发暂停，释放服务器内存与端口。
+- **彻底销毁 (Destroy)**: 停止容器并物理删除宿主机上的 `user_${userId}` 文件夹，清空所有代码文件及对话历史，以实现完全的清净重置。
