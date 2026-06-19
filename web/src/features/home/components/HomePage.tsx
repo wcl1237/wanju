@@ -134,9 +134,13 @@ const HomePage: React.FC = () => {
               </div>
               <div style={s.archArrow}>▼ 容器沙箱执行环境</div>
               <div style={s.archRow}>
-                <div className="arch-box" style={{ ...s.archBox, borderColor: '#ec4899', minWidth: 260 }}>
-                  <div style={s.archBoxTitle}>🦞 云龙虾容器沙箱 (OpenClaw)</div>
-                  <div style={s.archBoxText}>物理隔离的独立运行实例，双向 WebSocket 通道，执行高权限代码与脚本</div>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#ec4899', minWidth: 220 }}>
+                  <div style={s.archBoxTitle}>🦞 云龙虾 (OpenClaw)</div>
+                  <div style={s.archBoxText}>通用容器沙箱，双向 WebSocket 通道</div>
+                </div>
+                <div className="arch-box" style={{ ...s.archBox, borderColor: '#06b6d4', minWidth: 220 }}>
+                  <div style={s.archBoxTitle}>🤖 Code Agent</div>
+                  <div style={s.archBoxText}>容器化编码助手，ReAct + 工作流引擎</div>
                 </div>
               </div>
             </div>
@@ -176,6 +180,7 @@ const quickLinks = [
   { icon: '📚', label: '知识库' },
   { icon: '🎫', label: '工单管理' },
   { icon: '🦞', label: '云龙虾' },
+  { icon: '🤖', label: 'Code Agent' },
 ];
 
 interface Step { title: string; text: string; tip?: string }
@@ -254,6 +259,18 @@ const sections: Section[] = [
       { title: '物理销毁实例与彻底清空', text: '点击右上角「🗑️ 销毁实例」并确认警告，系统将不仅停止容器，还会从宿主机磁盘彻底【物理删除】该用户目录下的所有历史文件、设置及工作区代码。此操作不可逆。' },
     ],
   },
+  {
+    icon: '🤖', title: 'Code Agent', desc: '容器化智能编码助手，执行结构化工作流',
+    color: '#06b6d4',
+    steps: [
+      { title: '进入 Code Agent 控制台', text: '点击左侧导航「Code Agent」，进入容器管理与对话界面。' },
+      { title: '启动容器', text: '点击「🚀 启动 Code Agent」按钮，系统将自动为当前用户拉起一个独立的 Docker 容器，运行内置的 ReAct Agent。', tip: '容器首次启动需要几秒钟初始化，底部日志会显示启动进度。' },
+      { title: '对话交互', text: '在聊天窗口中直接与 Agent 对话，Agent 会自主使用 Bash、文件读写、代码搜索等工具完成任务。每个工具调用都会独立显示为单独的气泡。' },
+      { title: '推送工作流', text: '点击右上角「📋 推送工作流」，从预设模板中选择工作流（如「项目结构分析」），Agent 会按步骤自主执行，结果实时流式输出。', tip: '工作流执行过程中顶部会显示进度条，点击展开可查看各步骤状态。' },
+      { title: '决策交互', text: '当 Agent 遇到需要人工判断的场景时，会弹出决策卡片。您可以点击选项或输入自由文本来响应，响应后 Agent 自动继续执行。', tip: '决策卡片会显示您选择的内容，方便之后回顾。' },
+      { title: '销毁与重建', text: '点击「🗑️ 销毁实例」彻底清空容器和所有对话历史，重新启动即为全新环境。' },
+    ],
+  },
 ];
 
 const faqs = [
@@ -263,6 +280,9 @@ const faqs = [
   { q: '如何测试我的智能体配置？', a: '在智能体列表页点击卡片上的「💬 对话」按钮，即可进入专属对话测试页面。' },
   { q: '启动云龙虾时提示“容器引导异常”或连接不上怎么办？', a: '首先请确保您的宿主机已经运行了 Docker Desktop (可在控制台执行 docker ps 验证)；其次检查 server/.env 里的 OPENCLAW_SHARED_DATA_DIR 路径是否为绝对路径，如果是 macOS，需确认该路径已在 Docker 共享目录 File Sharing 列表中授权。' },
   { q: '为什么打开了新的云龙虾窗口，旧的控制台就会断开并显示已被接管？', a: '为避免同一个用户的 Docker 沙箱代理被多处同时控制而产生状态和数据竞争，系统设计了抢占接管（Owner Takeover）机制。当在别处建立新链路时，旧的 WebSocket 会自动关闭并显示提示，随时可以在旧控制台点击“夺回连接”切换回来。' },
+  { q: 'Code Agent 和云龙虾有什么区别？', a: 'Code Agent 内置了完整的 ReAct 推理引擎和工作流系统，专注于编码任务的自动化执行；云龙虾是通用的容器沙箱，更侧重于自定义 Agent 的部署和调试。两者都运行在独立的 Docker 容器中。' },
+  { q: 'Code Agent 的对话刷新后会丢失吗？', a: '不会。所有对话内容（包括文本、工具调用、工作流事件、决策记录）都以 JSONL 格式持久化存储在容器内，刷新页面后会完整恢复对话历史。只有「销毁实例」才会清空历史。' },
+  { q: 'Code Agent 的工作流执行中途可以暂停吗？', a: '遇到决策点时会自动暂停等待用户响应。目前不支持手动暂停正在执行的步骤，但您可以销毁容器来终止执行。' },
 ];
 
 /* ─── 样式 ─── */

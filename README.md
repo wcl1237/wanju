@@ -65,6 +65,16 @@
 - **诊断遥测看板** — 实时双向 WebSocket 通信通道，右侧抽屉持续输出网关和容器日志
 - **Agent 执行卡片渲染** — Markdown 文本流式呈现，支持 Browser base64 网页截图、Shell 命令行输出等高级卡片
 
+### 🤖 Code Agent（容器化编码助手）
+- **容器隔离执行** — 每个用户独立的 Docker 容器，运行在沙箱中的智能编码 Agent
+- **工作流引擎** — 接收主系统推送的结构化工作流，按步骤自主执行（分析→编码→测试）
+- **ReAct 推理循环** — LLM 驱动的 Thought → Action → Observation 循环，自主选择工具完成任务
+- **10 种内置工具** — Bash 执行、文件读写编辑、代码搜索（grep/glob）、进度汇报、记忆管理
+- **人机协作决策** — 遇到需要判断时暂停执行，等待用户决策后继续（支持选项和自由输入）
+- **对话持久化** — JSONL 格式记录完整交互过程，刷新页面后完整恢复对话历史
+- **独立工具气泡** — 每个工具调用独立显示，Markdown 渲染 + 语法高亮
+- **实时 WebSocket** — 流式输出思考过程和工具执行结果，支持断线自动重连
+
 ---
 
 ## 🏗 技术架构
@@ -125,13 +135,18 @@ web/src/
 ├── features/                 # Feature-Sliced 架构
 │   ├── agent/                # Agent 池管理
 │   ├── auth/                 # 登录认证
-│   ├── blueprint/            # 智能体蓝图管理（新增）
+│   ├── blueprint/            # 智能体蓝图管理
 │   │   ├── components/       # BlueprintPage + BlueprintEditor
 │   │   ├── api.ts            # 蓝图 API
 │   │   └── types.ts          # 蓝图类型定义
 │   ├── chat/                 # AI 对话（SSE 流式 + 工具状态追踪 + 停止按钮）
+│   ├── code-agent/           # Code Agent 编码助手（新增）
+│   │   ├── components/       # CodeAgentPage + MarkdownRenderer + WorkflowPushModal
+│   │   ├── store/            # Zustand store（WS 消息处理 + 状态管理）
+│   │   ├── api.ts            # Code Agent REST API
+│   │   └── types.ts          # 消息/决策/工作流类型
 │   ├── customer/             # 客户信息卡片
-│   ├── home/                 # 首页操作手册（新增）
+│   ├── home/                 # 首页操作手册
 │   ├── knowledge/            # 知识库管理
 │   ├── skill/                # 技能中心
 │   ├── ticket/               # 工单管理
@@ -258,6 +273,13 @@ cd server && npm start
 | **云龙虾** | `POST /api/openclaw/destroy` | 物理销毁容器与持久化数据 |
 | **云龙虾** | `GET /api/openclaw/status` | 获取活跃容器会话状态 |
 | **云龙虾** | `WS /ws/openclaw?sessionId=...` | WebSocket 实时对话与遥测日志网关 |
+| **Code Agent** | `POST /api/code-agent/start` | 启动 Code Agent 容器 |
+| **Code Agent** | `POST /api/code-agent/stop` | 暂停容器（保留数据） |
+| **Code Agent** | `POST /api/code-agent/destroy` | 销毁容器与数据 |
+| **Code Agent** | `GET /api/code-agent/status` | 获取容器状态 |
+| **Code Agent** | `GET /api/code-agent/messages` | 获取对话历史（JSONL） |
+| **Code Agent** | `POST /api/code-agent/push-workflow` | 推送工作流到容器 |
+| **Code Agent** | `WS /ws/code-agent?sessionId=...` | WebSocket 实时对话通道 |
 | **技能** | `GET/POST/PUT/DELETE /api/skills` | 技能 CRUD |
 | **技能** | `POST /api/skills/generate` | AI 智能创建技能 |
 | **客户** | `GET /api/customers` | 客户信息 |
