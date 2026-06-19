@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export type NavPage = 'home' | 'knowledge' | 'tickets' | 'workflows' | 'skills' | 'agents' | 'blueprints' | 'openclaw';
+export type NavPage = 'home' | 'knowledge' | 'tickets' | 'workflows' | 'skills' | 'agents' | 'blueprints' | 'openclaw' | 'code-agent';
 
 interface NavSidebarProps {
   activePage: NavPage;
@@ -19,6 +19,7 @@ const navItems: { id: NavPage; icon: string; label: string }[] = [
   { id: 'agents', icon: '🧑‍💼', label: 'Agent 池' },
   { id: 'skills', icon: '⚡', label: '技能中心' },
   { id: 'openclaw', icon: '🦞', label: '云龙虾' },
+  { id: 'code-agent', icon: '🤖', label: 'Code Agent' },
 ];
 
 const NavSidebar: React.FC<NavSidebarProps> = ({ activePage, onNavigate, username, onLogout }) => {

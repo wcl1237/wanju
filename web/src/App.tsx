@@ -20,6 +20,7 @@ import BlueprintPage from './features/blueprint/components/BlueprintPage';
 import BlueprintEditor from './features/blueprint/components/BlueprintEditor';
 import HomePage from './features/home/components/HomePage';
 import OpenClawPage from './features/openclaw/components/OpenClawPage';
+import CodeAgentPage from './features/code-agent/components/CodeAgentPage';
 
 // 路由 → NavPage 映射
 function getActivePage(pathname: string): NavPage {
@@ -32,6 +33,7 @@ function getActivePage(pathname: string): NavPage {
   if (pathname.startsWith('/agents')) return 'agents';
   if (pathname.startsWith('/skills')) return 'skills';
   if (pathname.startsWith('/openclaw')) return 'openclaw';
+  if (pathname.startsWith('/code-agent')) return 'code-agent';
   return 'home';
 }
 
@@ -44,6 +46,7 @@ const pageToRoute: Record<NavPage, string> = {
   agents: '/agents',
   skills: '/skills',
   openclaw: '/openclaw',
+  'code-agent': '/code-agent',
 };
 
 /**
@@ -241,6 +244,7 @@ function MainLayout({ user, onLogout }: { user: { id: string; username: string }
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/openclaw" element={<div style={styles.pageContent}><OpenClawPage /></div>} />
+          <Route path="/code-agent" element={<div style={styles.pageContent}><CodeAgentPage /></div>} />
           <Route path="/" element={<div style={styles.pageContent}><HomePage /></div>} />
           <Route path="/home" element={<div style={styles.pageContent}><HomePage /></div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
