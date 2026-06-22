@@ -1,8 +1,8 @@
-# 🤖 WanJu — 智能客服系统
+# 🤖 WanJu — 多功能智能体工具箱
 
 > AI-Powered Smart Customer Service Platform
 
-基于 **ReAct Agent + RAG 知识库 + 可视化工作流** 的全栈智能客服系统。
+基于 **ReAct Agent + RAG 知识库 + 可视化工作流** 的多功能智能体工具箱。
 
 ## ✨ 核心特性
 
